@@ -1,6 +1,6 @@
 import telebot
+from telebot import types
 import random
-import time
 from datetime import date
 
 # ==================================================
@@ -9,13 +9,13 @@ from datetime import date
 
 BOT_TOKEN = "8978005144:AAGforuwqrN_oF880nVOT5VyWnSMiqxrPVM"
 
-# 👑 Telegram ID خودت را اینجا بگذار
+# آیدی عددی تلگرام ادمین
 ADMIN_ID = 7723971526
 
 bot = telebot.TeleBot(BOT_TOKEN)
 
 # ==================================================
-# حافظه موقت
+# دیتای موقت
 # ==================================================
 
 users = {}
@@ -24,27 +24,54 @@ active_chats = {}
 reports = []
 
 # ==================================================
-# ساخت شماره کاربری
+# ساخت کد کاربری
+# 0001 تا 100000
 # ==================================================
 
 def generate_code():
+    used_codes = {u["code"] for u in users.values()}
 
-    while True:
-        code = str(random.randint(1000, 9999))
+    for number in range(1, 100001):
+        code = f"{number:04d}"
 
-        if not any(
-            user["code"] == code
-            for user in users.values()
-        ):
+        if code not in used_codes:
             return code
 
+    return None
+
 
 # ==================================================
-# پیدا کردن کاربر
+# ساخت کاربر
 # ==================================================
 
-def get_user(user_id):
-    return users.get(user_id)
+def create_user(user_id, name):
+
+    if user_id in users:
+        return True
+
+    code = generate_code()
+
+    if code is None:
+        return False
+
+    users[user_id] = {
+        "id": user_id,
+        "name": name,
+        "code": code,
+        "rank": "Bronze",
+        "level": 1,
+        "xp": 0,
+        "coins": 0,
+        "balance": 0,
+        "streak": 1,
+        "last_daily": str(date.today()),
+        "messages": 0,
+        "chats": 0,
+        "referrals": 0,
+        "banned": False
+    }
+
+    return True
 
 
 # ==================================================
@@ -57,86 +84,55 @@ def xp_needed(level):
 
 def add_xp(user_id, amount):
 
-    user = get_user(user_id)
-
-    if not user:
+    if user_id not in users:
         return
+
+    user = users[user_id]
 
     user["xp"] += amount
 
     while user["xp"] >= xp_needed(user["level"]):
 
         user["xp"] -= xp_needed(user["level"])
-
         user["level"] += 1
 
         reward = user["level"] * 100
-
         user["coins"] += reward
 
-        bot.send_message(
-            user_id,
-            f"""
-🎉 LEVEL UP!
-
-⭐ Level جدید:
-{user['level']}
-
-🎁 جایزه:
-🪙 +{reward} سکه
-
-🔥 ادامه بده!
-"""
-        )
+        try:
+            bot.send_message(
+                user_id,
+                f"🎉 تبریک!\n\n"
+                f"⭐ به Level {user['level']} رسیدی!\n"
+                f"🪙 پاداش: {reward} سکه"
+            )
+        except:
+            pass
 
 
 # ==================================================
-# ثبت نام
+# ابزار ادمین
 # ==================================================
 
-def register_user(message, name):
+def is_admin(user_id):
+    return user_id == ADMIN_ID
 
-    user_id = message.from_user.id
 
-    users[user_id] = {
+def is_banned(user_id):
 
-        "id": user_id,
-
-        "name": name,
-
-        "code": generate_code(),
-
-        "rank": "Member",
-
-        "level": 1,
-
-        "xp": 0,
-
-        "coins": 0,
-
-        "balance": 0,
-
-        "streak": 0,
-
-        "last_daily": None,
-
-        "banned": False,
-
-        "messages": 0,
-
-        "chats": 0,
-
-        "referrals": 0
-    }
+    return (
+        user_id in users
+        and users[user_id]["banned"]
+    )
 
 
 # ==================================================
 # منوی اصلی
 # ==================================================
 
-def main_keyboard():
+def main_keyboard(user_id=None):
 
-    kb = telebot.types.ReplyKeyboardMarkup(
+    kb = types.ReplyKeyboardMarkup(
         resize_keyboard=True
     )
 
@@ -165,6 +161,9 @@ def main_keyboard():
         "⚙️ تنظیمات"
     )
 
+    if user_id == ADMIN_ID:
+        kb.row("👑 مدیریت")
+
     return kb
 
 
@@ -177,117 +176,71 @@ def start(message):
 
     user_id = message.from_user.id
 
-    if user_id in users:
-
-        if users[user_id]["banned"]:
-
-            bot.send_message(
-                user_id,
-                "🚫 حساب شما مسدود است."
-            )
-
-            return
+    if is_banned(user_id):
 
         bot.send_message(
-            user_id,
-            "🔥 خوش برگشتی!",
-            reply_markup=main_keyboard()
-        )
-
-        daily_bonus(user_id)
-
-        return
-
-    msg = bot.send_message(
-        user_id,
-        """
-👋 سلام!
-
-🔥 به Streamer خوش اومدی!
-
-برای ساخت حساب، اسم خودت رو بفرست:
-"""
-    )
-
-    bot.register_next_step_handler(
-        msg,
-        finish_register
-    )
-
-
-def finish_register(message):
-
-    name = message.text.strip()
-
-    if len(name) < 2:
-
-        msg = bot.send_message(
             message.chat.id,
-            "❌ اسم خیلی کوتاهه.\nدوباره بفرست:"
-        )
-
-        bot.register_next_step_handler(
-            msg,
-            finish_register
+            "🚫 شما از استفاده از این بات محروم شده‌اید."
         )
 
         return
 
-    register_user(
-        message,
-        name
-    )
+    is_new = user_id not in users
+
+    if not create_user(
+        user_id,
+        message.from_user.first_name or "کاربر"
+    ):
+
+        bot.send_message(
+            message.chat.id,
+            "❌ ظرفیت ثبت‌نام تکمیل شده است."
+        )
+
+        return
+
+    user = users[user_id]
+
+    # پاداش روزانه
+    today = str(date.today())
+
+    if not is_new and user["last_daily"] != today:
+
+        user["last_daily"] = today
+        user["streak"] += 1
+
+        user["coins"] += 50
+
+        add_xp(user_id, 20)
+
+        bot.send_message(
+            message.chat.id,
+            f"🎁 پاداش روزانه دریافت شد!\n\n"
+            f"🪙 +50 سکه\n"
+            f"⭐ +20 XP\n"
+            f"🔥 استریک: {user['streak']} روز"
+        )
+
+    if is_new:
+
+        bot.send_message(
+            message.chat.id,
+            f"""
+🎉 به «چت ناشناس» خوش اومدی!
+
+🆔 کد کاربری شما:
+{user['code']}
+
+اینجا می‌تونی با افراد جدید
+به صورت ناشناس چت کنی، بازی کنی،
+XP بگیری و رتبه‌ات رو بالا ببری. 🔥
+"""
+        )
 
     bot.send_message(
         message.chat.id,
-        """
-🎉 ثبت‌نام انجام شد!
-
-🔥 به دنیای Streamer خوش اومدی.
-
-از منوی پایین شروع کن 👇
-""",
-        reply_markup=main_keyboard()
-    )
-
-
-# ==================================================
-# پاداش روزانه
-# ==================================================
-
-def daily_bonus(user_id):
-
-    user = get_user(user_id)
-
-    today = str(date.today())
-
-    if user["last_daily"] == today:
-        return
-
-    yesterday_bonus = user["last_daily"]
-
-    user["last_daily"] = today
-
-    user["coins"] += 50
-
-    add_xp(
-        user_id,
-        20
-    )
-
-    user["streak"] += 1
-
-    bot.send_message(
-        user_id,
-        f"""
-🔥 پاداش روزانه!
-
-⭐ +20 XP
-🪙 +50 سکه
-
-🔥 Streak:
-{user['streak']} روز
-"""
+        "🏠 منوی اصلی:",
+        reply_markup=main_keyboard(user_id)
     )
 
 
@@ -300,54 +253,54 @@ def daily_bonus(user_id):
 )
 def profile(message):
 
-    user = get_user(message.from_user.id)
+    user_id = message.from_user.id
 
-    if not user:
+    if user_id not in users:
         return
 
-    needed = xp_needed(
-        user["level"]
+    user = users[user_id]
+
+    needed = xp_needed(user["level"])
+
+    progress = int(
+        (user["xp"] / needed) * 10
     )
+
+    progress = min(progress, 10)
+
+    bar = (
+        "🟦" * progress
+        + "⬜" * (10 - progress)
+    )
+
+    text = f"""
+╭━━━━━━━━━━━━━━╮
+       👤 پروفایل من
+╰━━━━━━━━━━━━━━╯
+
+👤 نام: {user['name']}
+🆔 کد کاربری: {user['code']}
+
+👑 رتبه: {user['rank']}
+⭐ Level: {user['level']}
+
+✨ XP: {user['xp']} / {needed}
+{bar}
+
+🪙 سکه: {user['coins']}
+💰 موجودی: {user['balance']}
+
+🔥 استریک: {user['streak']} روز
+
+💬 تعداد چت‌ها: {user['chats']}
+📨 تعداد پیام‌ها: {user['messages']}
+
+🏅 وضعیت: کاربر فعال
+"""
 
     bot.send_message(
         message.chat.id,
-        f"""
-👤 پروفایل
-
-━━━━━━━━━━━━
-
-📝 نام:
-{user['name']}
-
-🔢 شماره:
-#{user['code']}
-
-👑 رتبه:
-{user['rank']}
-
-⭐ Level:
-{user['level']}
-
-✨ XP:
-{user['xp']} / {needed}
-
-🪙 سکه:
-{user['coins']}
-
-💰 موجودی:
-{user['balance']:,} تومان
-
-🔥 Streak:
-{user['streak']} روز
-
-💬 تعداد چت:
-{user['chats']}
-
-📨 پیام‌ها:
-{user['messages']}
-
-━━━━━━━━━━━━
-"""
+        text
     )
 
 
@@ -360,10 +313,12 @@ def profile(message):
 )
 def wallet(message):
 
-    user = get_user(message.from_user.id)
+    user_id = message.from_user.id
 
-    if not user:
+    if user_id not in users:
         return
+
+    user = users[user_id]
 
     bot.send_message(
         message.chat.id,
@@ -371,13 +326,13 @@ def wallet(message):
 🪙 کیف پول
 
 💰 موجودی:
-{user['balance']:,} تومان
+{user['balance']}
 
 🪙 سکه:
 {user['coins']}
 
-⭐ XP:
-{user['xp']}
+👑 رتبه:
+{user['rank']}
 """
     )
 
@@ -391,33 +346,50 @@ def wallet(message):
 )
 def missions(message):
 
-    user = get_user(message.from_user.id)
-
-    if not user:
-        return
-
     bot.send_message(
         message.chat.id,
         """
 🎯 مأموریت‌های امروز
 
-⬜ یک چت انجام بده
-🎁 +20 XP
+💬 ارسال 10 پیام
+🎁 پاداش: 100 XP
 
-⬜ 5 پیام بفرست
-🎁 +30 XP
+👥 پیدا کردن یک چت جدید
+🎁 پاداش: 50 XP
 
-⬜ یک دوست دعوت کن
-🎁 +100 XP
+🎮 انجام یک بازی
+🎁 پاداش: 50 سکه
 
-⬜ پاداش روزانه را بگیر
-🎁 +20 XP
+🔥 ورود روزانه
+🎁 پاداش: 50 سکه
 """
     )
 
 
 # ==================================================
-# بازی
+# جوایز
+# ==================================================
+
+@bot.message_handler(
+    func=lambda m: m.text == "🎁 جوایز"
+)
+def rewards(message):
+
+    bot.send_message(
+        message.chat.id,
+        """
+🎁 جوایز
+
+⭐ با افزایش Level و فعالیت بیشتر
+می‌تونی جوایز بیشتری دریافت کنی.
+
+🔥 هر روز وارد شو تا استریکت بیشتر بشه!
+"""
+    )
+
+
+# ==================================================
+# بازی‌ها
 # ==================================================
 
 @bot.message_handler(
@@ -425,25 +397,25 @@ def missions(message):
 )
 def games(message):
 
-    kb = telebot.types.InlineKeyboardMarkup()
+    kb = types.InlineKeyboardMarkup()
 
     kb.add(
-        telebot.types.InlineKeyboardButton(
-            "🎲 حدس عدد",
+        types.InlineKeyboardButton(
+            "🎯 حدس عدد",
             callback_data="guess"
         )
     )
 
     kb.add(
-        telebot.types.InlineKeyboardButton(
-            "✊ سنگ کاغذ قیچی",
+        types.InlineKeyboardButton(
+            "✊ سنگ 🖐 کاغذ ✌️ قیچی",
             callback_data="rps"
         )
     )
 
     bot.send_message(
         message.chat.id,
-        "🎮 بازی را انتخاب کن:",
+        "🎮 یک بازی انتخاب کن:",
         reply_markup=kb
     )
 
@@ -453,75 +425,193 @@ def games(message):
 # ==================================================
 
 @bot.callback_query_handler(
-    func=lambda c: c.data == "guess"
+    func=lambda call: call.data == "guess"
 )
 def guess_game(call):
 
-    number = random.randint(
-        1,
-        5
-    )
+    user_id = call.from_user.id
 
-    msg = bot.send_message(
-        call.message.chat.id,
-        "🎲 یک عدد بین 1 تا 5 بفرست:"
-    )
-
-    bot.register_next_step_handler(
-        msg,
-        check_guess,
-        number
-    )
-
-
-def check_guess(message, number):
-
-    try:
-        guess = int(message.text)
-
-    except:
-
-        bot.send_message(
-            message.chat.id,
-            "❌ فقط عدد بفرست."
-        )
-
+    if user_id not in users:
         return
 
-    if guess == number:
+    number = random.randint(1, 5)
 
-        user = get_user(
-            message.from_user.id
+    kb = types.InlineKeyboardMarkup()
+
+    for i in range(1, 6):
+
+        kb.add(
+            types.InlineKeyboardButton(
+                str(i),
+                callback_data=f"guess_{i}_{number}"
+            )
         )
 
-        user["coins"] += 100
+    bot.answer_callback_query(call.id)
+
+    bot.edit_message_text(
+        "🎯 من یک عدد بین 1 تا 5 انتخاب کردم!\n\n"
+        "حدست رو بزن:",
+        call.message.chat.id,
+        call.message.message_id,
+        reply_markup=kb
+    )
+
+
+@bot.callback_query_handler(
+    func=lambda call: call.data.startswith("guess_")
+)
+def guess_result(call):
+
+    parts = call.data.split("_")
+
+    selected = int(parts[1])
+    number = int(parts[2])
+
+    user_id = call.from_user.id
+
+    if selected == number:
+
+        users[user_id]["coins"] += 100
 
         add_xp(
-            message.from_user.id,
+            user_id,
             50
         )
 
-        bot.send_message(
-            message.chat.id,
-            """
-🎉 بردی!
-
-⭐ +50 XP
-🪙 +100 سکه
-"""
+        text = (
+            "🎉 درست حدس زدی!\n\n"
+            f"🔢 عدد: {number}\n"
+            "🪙 +100 سکه\n"
+            "⭐ +50 XP"
         )
 
     else:
 
-        bot.send_message(
-            message.chat.id,
-            f"""
-❌ باختی!
-
-عدد درست:
-{number}
-"""
+        text = (
+            "❌ اشتباه بود!\n\n"
+            f"🔢 عدد درست: {number}"
         )
+
+    bot.answer_callback_query(call.id)
+
+    bot.edit_message_text(
+        text,
+        call.message.chat.id,
+        call.message.message_id
+    )
+
+
+# ==================================================
+# سنگ کاغذ قیچی
+# ==================================================
+
+@bot.callback_query_handler(
+    func=lambda call: call.data == "rps"
+)
+def rps_game(call):
+
+    kb = types.InlineKeyboardMarkup()
+
+    kb.row(
+        types.InlineKeyboardButton(
+            "✊ سنگ",
+            callback_data="rps_rock"
+        ),
+        types.InlineKeyboardButton(
+            "🖐 کاغذ",
+            callback_data="rps_paper"
+        ),
+        types.InlineKeyboardButton(
+            "✌️ قیچی",
+            callback_data="rps_scissors"
+        )
+    )
+
+    bot.answer_callback_query(call.id)
+
+    bot.edit_message_text(
+        "🎮 انتخاب کن:",
+        call.message.chat.id,
+        call.message.message_id,
+        reply_markup=kb
+    )
+
+
+@bot.callback_query_handler(
+    func=lambda call: call.data.startswith("rps_")
+)
+def rps_result(call):
+
+    choices = [
+        "rock",
+        "paper",
+        "scissors"
+    ]
+
+    user_choice = call.data.replace(
+        "rps_",
+        ""
+    )
+
+    bot_choice = random.choice(
+        choices
+    )
+
+    names = {
+        "rock": "✊ سنگ",
+        "paper": "🖐 کاغذ",
+        "scissors": "✌️ قیچی"
+    }
+
+    if user_choice == bot_choice:
+
+        result = "🤝 مساوی شد!"
+
+    elif (
+        (user_choice == "rock"
+         and bot_choice == "scissors")
+        or
+        (user_choice == "paper"
+         and bot_choice == "rock")
+        or
+        (user_choice == "scissors"
+         and bot_choice == "paper")
+    ):
+
+        users[call.from_user.id]["coins"] += 100
+
+        add_xp(
+            call.from_user.id,
+            50
+        )
+
+        result = (
+            "🎉 تو بردی!\n"
+            "🪙 +100 سکه\n"
+            "⭐ +50 XP"
+        )
+
+    else:
+
+        result = "😅 باختی!"
+
+    bot.answer_callback_query(
+        call.id
+    )
+
+    bot.edit_message_text(
+        f"""
+🎮 نتیجه
+
+👤 تو: {names[user_choice]}
+🤖 بات: {names[bot_choice]}
+
+{result}
+""",
+        call.message.chat.id,
+        call.message.message_id
+    )
 
 
 # ==================================================
@@ -533,36 +623,35 @@ def check_guess(message, number):
 )
 def leaderboard(message):
 
-    top = sorted(
-        users.values(),
-        key=lambda u: (
-            u["level"],
-            u["xp"]
-        ),
-        reverse=True
-    )[:10]
+    if not users:
 
-    text = "🏆 برترین کاربران\n\n"
-
-    medals = [
-        "🥇",
-        "🥈",
-        "🥉"
-    ]
-
-    for i, user in enumerate(top):
-
-        medal = (
-            medals[i]
-            if i < 3
-            else f"{i+1}."
+        bot.send_message(
+            message.chat.id,
+            "هنوز کاربری وجود ندارد."
         )
 
+        return
+
+    ranking = sorted(
+        users.values(),
+        key=lambda x: (
+            x["level"],
+            x["xp"]
+        ),
+        reverse=True
+    )
+
+    text = "🏆 رتبه‌بندی کاربران\n\n"
+
+    for index, user in enumerate(
+        ranking[:10],
+        1
+    ):
+
         text += (
-            f"{medal} "
-            f"{user['name']} | "
-            f"Level {user['level']} | "
-            f"{user['rank']}\n"
+            f"{index}. 👤 {user['name']} "
+            f"— Level {user['level']} "
+            f"⭐ {user['xp']} XP\n"
         )
 
     bot.send_message(
@@ -580,70 +669,74 @@ def leaderboard(message):
 )
 def shop(message):
 
-    kb = telebot.types.InlineKeyboardMarkup()
+    kb = types.InlineKeyboardMarkup()
 
     kb.add(
-        telebot.types.InlineKeyboardButton(
-            "🥈 Silver — 50,000",
-            callback_data="silver"
+        types.InlineKeyboardButton(
+            "🥈 Silver - 50,000",
+            callback_data="shop_silver"
         )
     )
 
     kb.add(
-        telebot.types.InlineKeyboardButton(
-            "🥇 Gold — 160,000",
-            callback_data="gold"
+        types.InlineKeyboardButton(
+            "🥇 Gold - 160,000",
+            callback_data="shop_gold"
         )
     )
 
     kb.add(
-        telebot.types.InlineKeyboardButton(
-            "💎 Diamond — 300,000",
-            callback_data="diamond"
+        types.InlineKeyboardButton(
+            "💎 Diamond - 300,000",
+            callback_data="shop_diamond"
         )
     )
 
     bot.send_message(
         message.chat.id,
-        "🛒 فروشگاه\n\nرتبه موردنظر را انتخاب کن:",
+        "🛒 فروشگاه رتبه‌ها:",
         reply_markup=kb
     )
 
 
 @bot.callback_query_handler(
-    func=lambda c:
-    c.data in [
-        "silver",
-        "gold",
-        "diamond"
-    ]
+    func=lambda call: call.data.startswith("shop_")
 )
 def buy_rank(call):
 
-    user = get_user(
-        call.from_user.id
-    )
+    user_id = call.from_user.id
+
+    if user_id not in users:
+        return
 
     prices = {
-        "silver": 50000,
-        "gold": 160000,
-        "diamond": 300000
+        "shop_silver": (
+            50000,
+            "Silver"
+        ),
+        "shop_gold": (
+            160000,
+            "Gold"
+        ),
+        "shop_diamond": (
+            300000,
+            "Diamond"
+        )
     }
 
-    ranks = {
-        "silver": "Silver",
-        "gold": "Gold",
-        "diamond": "Diamond"
-    }
+    if call.data not in prices:
+        return
 
-    price = prices[call.data]
-    rank = ranks[call.data]
+    price, rank = prices[call.data]
+
+    user = users[user_id]
 
     if user["balance"] < price:
 
         bot.answer_callback_query(
             call.id,
-            "❌ موجودی کافی نیست."
+            "❌ موجودی کافی نیست!",
+            show_alert=True
         )
 
         return
@@ -653,42 +746,43 @@ def buy_rank(call):
 
     bot.answer_callback_query(
         call.id,
-        "✅ خرید موفق!"
+        "✅ خرید موفق بود!"
     )
 
     bot.send_message(
-        call.message.chat.id,
+        user_id,
         f"""
-🎉 تبریک!
+🎉 خرید موفق!
 
 👑 رتبه جدید:
 {rank}
 
-💰 پرداخت:
-{price:,} تومان
+💰 مبلغ پرداختی:
+{price:,}
 """
     )
 
 
 # ==================================================
-# دعوت
+# دعوت دوستان
 # ==================================================
 
 @bot.message_handler(
     func=lambda m: m.text == "👥 دعوت دوستان"
 )
-def referral(message):
+def referrals(message):
 
-    user = get_user(
-        message.from_user.id
-    )
+    user_id = message.from_user.id
 
-    username = bot.get_me().username
+    if user_id not in users:
+        return
+
+    bot_info = bot.get_me()
 
     link = (
         f"https://t.me/"
-        f"{username}"
-        f"?start=ref{user['id']}"
+        f"{bot_info.username}"
+        f"?start=ref{user_id}"
     )
 
     bot.send_message(
@@ -696,19 +790,41 @@ def referral(message):
         f"""
 👥 دعوت دوستان
 
-لینک دعوت تو:
+🔗 لینک دعوت اختصاصی تو:
 
 {link}
 
-🎁 هر دوست جدید:
-⭐ +100 XP
-🪙 +100 سکه
+🎁 با دعوت دوستان می‌تونی
+پاداش دریافت کنی.
 """
     )
 
 
 # ==================================================
-# چت
+# تنظیمات
+# ==================================================
+
+@bot.message_handler(
+    func=lambda m: m.text == "⚙️ تنظیمات"
+)
+def settings(message):
+
+    bot.send_message(
+        message.chat.id,
+        """
+⚙️ تنظیمات
+
+🔔 اعلان‌ها: فعال
+🕵️ حالت ناشناس: فعال
+🔒 حریم خصوصی: فعال
+
+نسخه آزمایشی
+"""
+    )
+
+
+# ==================================================
+# شروع چت ناشناس
 # ==================================================
 
 @bot.message_handler(
@@ -716,12 +832,17 @@ def referral(message):
 )
 def chat_menu(message):
 
-    kb = telebot.types.InlineKeyboardMarkup()
+    user_id = message.from_user.id
+
+    if user_id not in users:
+        return
+
+    kb = types.InlineKeyboardMarkup()
 
     kb.add(
-        telebot.types.InlineKeyboardButton(
+        types.InlineKeyboardButton(
             "🔎 پیدا کردن چت",
-            callback_data="find"
+            callback_data="find_chat"
         )
     )
 
@@ -730,16 +851,22 @@ def chat_menu(message):
         """
 💬 چت ناشناس
 
-با یک کاربر دیگر صحبت کن.
+با یک نفر به صورت ناشناس
+وارد گفتگو شو.
 
-Telegram ID و Username نمایش داده نمی‌شود.
+نام و رتبه انتخابی کاربر
+برای طرف مقابل نمایش داده می‌شود.
 """,
         reply_markup=kb
     )
 
 
+# ==================================================
+# پیدا کردن چت
+# ==================================================
+
 @bot.callback_query_handler(
-    func=lambda c: c.data == "find"
+    func=lambda call: call.data == "find_chat"
 )
 def find_chat(call):
 
@@ -749,92 +876,93 @@ def find_chat(call):
 
         bot.answer_callback_query(
             call.id,
-            "❌ تو الان در چت هستی."
+            "❌ شما همین الان داخل یک چت هستید!",
+            show_alert=True
         )
 
         return
 
-    if user_id not in waiting_users:
+    # اگر قبلاً در صف است
+    if user_id in waiting_users:
 
-        waiting_users.append(
-            user_id
+        bot.answer_callback_query(
+            call.id,
+            "⏳ شما در صف هستید.",
+            show_alert=True
         )
 
-    if len(waiting_users) < 2:
+        return
+
+    # پیدا کردن نفر اول صف
+    partner_id = None
+
+    for waiting_id in waiting_users:
+
+        if waiting_id != user_id:
+            partner_id = waiting_id
+            break
+
+    if partner_id is None:
+
+        waiting_users.append(user_id)
+
+        bot.answer_callback_query(
+            call.id
+        )
 
         bot.send_message(
             user_id,
-            "🔎 منتظر یک نفر دیگر هستیم..."
+            "🔎 در حال پیدا کردن یک نفر...\n\n"
+            "⏳ لطفاً صبر کن."
         )
 
         return
 
-    first = waiting_users.pop(0)
-    second = waiting_users.pop(0)
+    # حذف نفر دوم از صف
+    if user_id in waiting_users:
+        waiting_users.remove(user_id)
 
-    active_chats[first] = second
-    active_chats[second] = first
+    if partner_id in waiting_users:
+        waiting_users.remove(partner_id)
 
-    users[first]["chats"] += 1
-    users[second]["chats"] += 1
+    # ایجاد چت
+    active_chats[user_id] = partner_id
+    active_chats[partner_id] = user_id
 
-    bot.send_message(
-        first,
-        """
-🎉 چت پیدا شد!
+    users[user_id]["chats"] += 1
+    users[partner_id]["chats"] += 1
 
-پیامت را بفرست 👇
-
-❌ برای پایان:
- /end
-"""
+    bot.answer_callback_query(
+        call.id
     )
 
     bot.send_message(
-        second,
-        """
-🎉 چت پیدا شد!
-
-پیامت را بفرست 👇
-
-❌ برای پایان:
- /end
-"""
-    )
-
-
-# ==================================================
-# انتقال پیام چت
-# ==================================================
-
-@bot.message_handler(
-    func=lambda m:
-    m.from_user.id in active_chats
-)
-def relay(message):
-
-    user_id = message.from_user.id
-
-    other = active_chats[user_id]
-
-    user = get_user(user_id)
-
-    if not user:
-        return
-
-    user["messages"] += 1
-
-    add_xp(
         user_id,
-        5
+        """
+🎉 یک نفر پیدا شد!
+
+💬 چت شما شروع شد.
+
+برای پایان دادن:
+ /end
+
+برای گزارش:
+ /report
+"""
     )
 
     bot.send_message(
-        other,
-        f"""
-💬 {user['name']} | {user['rank']} گفت:
+        partner_id,
+        """
+🎉 یک نفر پیدا شد!
 
-{message.text}
+💬 چت شما شروع شد.
+
+برای پایان دادن:
+ /end
+
+برای گزارش:
+ /report
 """
     )
 
@@ -853,33 +981,50 @@ def end_chat(message):
     if user_id not in active_chats:
 
         bot.send_message(
-            user_id,
-            "❌ چتی نداری."
+            message.chat.id,
+            "❌ شما داخل چت ناشناس نیستید."
         )
 
         return
 
-    other = active_chats[user_id]
+    partner_id = active_chats.get(
+        user_id
+    )
 
-    del active_chats[user_id]
+    # قطع ارتباط
+    active_chats.pop(
+        user_id,
+        None
+    )
 
-    if other in active_chats:
-        del active_chats[other]
+    active_chats.pop(
+        partner_id,
+        None
+    )
 
     bot.send_message(
         user_id,
-        "❌ چت پایان یافت."
+        """
+🛑 چت پایان یافت.
+
+برای پیدا کردن یک نفر جدید:
+💬 چت
+➡️ 🔎 پیدا کردن چت
+"""
     )
 
-    try:
+    if partner_id:
 
         bot.send_message(
-            other,
-            "❌ طرف مقابل چت را پایان داد."
-        )
+            partner_id,
+            """
+🛑 طرف مقابل چت را پایان داد.
 
-    except:
-        pass
+برای پیدا کردن یک نفر جدید:
+💬 چت
+➡️ 🔎 پیدا کردن چت
+"""
+        )
 
 
 # ==================================================
@@ -889,120 +1034,231 @@ def end_chat(message):
 @bot.message_handler(
     commands=["report"]
 )
-def report(message):
+def report_user(message):
 
     user_id = message.from_user.id
 
     if user_id not in active_chats:
+
+        bot.send_message(
+            message.chat.id,
+            "❌ شما داخل چت ناشناس نیستید."
+        )
+
         return
 
-    other = active_chats[user_id]
+    partner_id = active_chats[user_id]
 
     reports.append({
         "reporter": user_id,
-        "reported": other,
-        "time": time.time()
+        "reported": partner_id
     })
 
     bot.send_message(
-        user_id,
-        "🚨 گزارش ثبت شد."
+        message.chat.id,
+        """
+🚨 گزارش ثبت شد.
+
+گزارش شما برای مدیریت ارسال شد.
+"""
     )
 
 
 # ==================================================
-# ADMIN
+# پیام‌های داخل چت ناشناس
+#
+# نکته مهم:
+# هیچ پیام شروع‌شده با / ارسال نمی‌شود.
 # ==================================================
 
-def is_admin(user_id):
+@bot.message_handler(
+    func=lambda m: (
+        m.from_user.id in active_chats
+        and m.text is not None
+        and not m.text.startswith("/")
+    )
+)
+def anonymous_chat(message):
 
-    return user_id == ADMIN_ID
+    user_id = message.from_user.id
+
+    partner_id = active_chats.get(
+        user_id
+    )
+
+    if not partner_id:
+        return
+
+    if partner_id not in active_chats:
+
+        active_chats.pop(
+            user_id,
+            None
+        )
+
+        bot.send_message(
+            user_id,
+            "❌ این چت دیگر فعال نیست."
+        )
+
+        return
+
+    user = users.get(user_id)
+
+    if not user:
+        return
+
+    user["messages"] += 1
+
+    add_xp(
+        user_id,
+        5
+    )
+
+    bot.send_message(
+        partner_id,
+        f"""
+👤 {user['name']}
+
+{message.text}
+"""
+    )
+
+
+# ==================================================
+# مدیریت
+# ==================================================
+
+def admin_panel(message):
+
+    if not is_admin(message.from_user.id):
+
+        bot.send_message(
+            message.chat.id,
+            "⛔ دسترسی غیرمجاز."
+        )
+
+        return
+
+    kb = types.InlineKeyboardMarkup()
+
+    kb.row(
+        types.InlineKeyboardButton(
+            "📊 آمار",
+            callback_data="admin_stats"
+        ),
+        types.InlineKeyboardButton(
+            "👥 کاربران",
+            callback_data="admin_users"
+        )
+    )
+
+    kb.row(
+        types.InlineKeyboardButton(
+            "🔎 جستجوی کاربر",
+            callback_data="admin_search"
+        )
+    )
+
+    kb.row(
+        types.InlineKeyboardButton(
+            "💰 افزایش پول",
+            callback_data="admin_add_money"
+        ),
+        types.InlineKeyboardButton(
+            "💸 کاهش پول",
+            callback_data="admin_remove_money"
+        )
+    )
+
+    kb.row(
+        types.InlineKeyboardButton(
+            "⭐ تغییر XP",
+            callback_data="admin_xp"
+        ),
+        types.InlineKeyboardButton(
+            "🪙 تغییر سکه",
+            callback_data="admin_coins"
+        )
+    )
+
+    kb.row(
+        types.InlineKeyboardButton(
+            "👑 تغییر رتبه",
+            callback_data="admin_rank"
+        ),
+        types.InlineKeyboardButton(
+            "🚫 بن کاربر",
+            callback_data="admin_ban"
+        )
+    )
+
+    kb.row(
+        types.InlineKeyboardButton(
+            "📢 پیام همگانی",
+            callback_data="admin_broadcast"
+        )
+    )
+
+    kb.row(
+        types.InlineKeyboardButton(
+            "🚨 گزارش‌ها",
+            callback_data="admin_reports"
+        )
+    )
+
+    bot.send_message(
+        message.chat.id,
+        "👑 پنل مدیریت\n\nیک گزینه را انتخاب کن:",
+        reply_markup=kb
+    )
 
 
 @bot.message_handler(
     commands=["admin"]
 )
-def admin(message):
+def admin_command(message):
 
-    if not is_admin(
-        message.from_user.id
-    ):
+    admin_panel(message)
 
-        bot.send_message(
-            message.chat.id,
-            "⛔ دسترسی ندارید."
-        )
 
-        return
+@bot.message_handler(
+    func=lambda m: m.text == "👑 مدیریت"
+)
+def admin_button(message):
 
-    kb = telebot.types.InlineKeyboardMarkup()
-
-    buttons = [
-
-        ("📊 آمار", "stats"),
-
-        ("👥 کاربران", "users"),
-
-        ("🔎 جستجوی کاربر", "search"),
-
-        ("💰 افزایش پول", "addmoney"),
-
-        ("💸 کاهش پول", "removemoney"),
-
-        ("⭐ تغییر XP", "xp"),
-
-        ("🪙 تغییر سکه", "coins"),
-
-        ("👑 تغییر رتبه", "rank"),
-
-        ("🚫 بن کاربر", "ban"),
-
-        ("📢 پیام همگانی", "broadcast"),
-
-        ("🚨 گزارش‌ها", "reports")
-    ]
-
-    for text, data in buttons:
-
-        kb.add(
-            telebot.types.InlineKeyboardButton(
-                text,
-                callback_data="admin_" + data
-            )
-        )
-
-    bot.send_message(
-        message.chat.id,
-        "👑 پنل مدیریت",
-        reply_markup=kb
-    )
+    admin_panel(message)
 
 
 # ==================================================
-# ADMIN STATS
+# آمار ادمین
 # ==================================================
 
 @bot.callback_query_handler(
-    func=lambda c: c.data == "admin_stats"
+    func=lambda call: call.data == "admin_stats"
 )
 def admin_stats(call):
 
     if not is_admin(call.from_user.id):
         return
 
+    bot.answer_callback_query(
+        call.id
+    )
+
     bot.send_message(
         call.message.chat.id,
         f"""
-📊 آمار ربات
+📊 آمار بات
 
 👥 کاربران:
 {len(users)}
 
-💬 چت‌های فعال:
-{len(active_chats)//2}
-
-🔎 منتظر چت:
+⏳ در صف چت:
 {len(waiting_users)}
+
+💬 چت‌های فعال:
+{len(active_chats) // 2}
 
 🚨 گزارش‌ها:
 {len(reports)}
@@ -1011,27 +1267,38 @@ def admin_stats(call):
 
 
 # ==================================================
-# ADMIN USERS
+# تعداد کاربران
 # ==================================================
 
 @bot.callback_query_handler(
-    func=lambda c: c.data == "admin_users"
+    func=lambda call: call.data == "admin_users"
 )
 def admin_users(call):
 
     if not is_admin(call.from_user.id):
         return
 
-    text = "👥 کاربران\n\n"
+    bot.answer_callback_query(
+        call.id
+    )
 
-    for user in list(users.values())[:20]:
+    if not users:
+
+        bot.send_message(
+            call.message.chat.id,
+            "👥 هنوز کاربری ثبت نشده."
+        )
+
+        return
+
+    text = "👥 کاربران:\n\n"
+
+    for user in list(users.values())[:50]:
 
         text += (
-            f"👤 {user['name']}\n"
-            f"🔢 #{user['code']}\n"
-            f"👑 {user['rank']}\n"
-            f"⭐ Level {user['level']}\n"
-            f"💰 {user['balance']:,}\n\n"
+            f"🆔 {user['code']} | "
+            f"{user['name']} | "
+            f"Level {user['level']}\n"
         )
 
     bot.send_message(
@@ -1041,29 +1308,33 @@ def admin_users(call):
 
 
 # ==================================================
-# ADMIN SEARCH
+# جستجوی کاربر
 # ==================================================
 
 @bot.callback_query_handler(
-    func=lambda c: c.data == "admin_search"
+    func=lambda call: call.data == "admin_search"
 )
 def admin_search(call):
 
     if not is_admin(call.from_user.id):
         return
 
+    bot.answer_callback_query(
+        call.id
+    )
+
     msg = bot.send_message(
         call.message.chat.id,
-        "🔎 شماره ۴ رقمی را بفرست:"
+        "🔎 کد کاربری را وارد کن:\nمثلاً 0001"
     )
 
     bot.register_next_step_handler(
         msg,
-        search_user
+        search_user_result
     )
 
 
-def search_user(message):
+def search_user_result(message):
 
     if not is_admin(message.from_user.id):
         return
@@ -1082,7 +1353,7 @@ def search_user(message):
 
         bot.send_message(
             message.chat.id,
-            "❌ پیدا نشد."
+            "❌ کاربر پیدا نشد."
         )
 
         return
@@ -1090,16 +1361,19 @@ def search_user(message):
     bot.send_message(
         message.chat.id,
         f"""
-👤 کاربر
+👤 اطلاعات کاربر
 
-📝 {found['name']}
+🆔 کد:
+{found['code']}
 
-🔢 #{found['code']}
+👤 نام:
+{found['name']}
 
-🆔 Telegram ID:
+📱 Telegram ID:
 {found['id']}
 
-👑 {found['rank']}
+👑 رتبه:
+{found['rank']}
 
 ⭐ Level:
 {found['level']}
@@ -1110,32 +1384,40 @@ def search_user(message):
 🪙 سکه:
 {found['coins']}
 
-💰 پول:
-{found['balance']:,}
+💰 موجودی:
+{found['balance']}
 
-🚫 Ban:
-{found['banned']}
+🔥 استریک:
+{found['streak']}
+
+🚫 بن:
+{"بله" if found["banned"] else "خیر"}
 """
     )
 
 
 # ==================================================
-# ADMIN ADD MONEY
+# افزایش پول
 # ==================================================
 
 @bot.callback_query_handler(
-    func=lambda c: c.data == "admin_addmoney"
+    func=lambda call: call.data == "admin_add_money"
 )
-def add_money(call):
+def admin_add_money(call):
 
     if not is_admin(call.from_user.id):
         return
 
+    bot.answer_callback_query(
+        call.id
+    )
+
     msg = bot.send_message(
         call.message.chat.id,
-        "شماره کاربر و مبلغ را بفرست.\n\n"
+        "💰 به این شکل وارد کن:\n\n"
+        "کد کاربر مبلغ\n\n"
         "مثال:\n"
-        "1234 50000"
+        "0001 50000"
     )
 
     bot.register_next_step_handler(
@@ -1159,45 +1441,58 @@ def process_add_money(message):
 
         bot.send_message(
             message.chat.id,
-            "❌ فرمت اشتباه."
+            "❌ فرمت اشتباه است."
         )
 
         return
 
+    target = None
+
     for user in users.values():
 
         if user["code"] == code:
+            target = user
+            break
 
-            user["balance"] += amount
+    if not target:
 
-            bot.send_message(
-                message.chat.id,
-                "✅ موجودی اضافه شد."
-            )
+        bot.send_message(
+            message.chat.id,
+            "❌ کاربر پیدا نشد."
+        )
 
-            return
+        return
+
+    target["balance"] += amount
 
     bot.send_message(
         message.chat.id,
-        "❌ کاربر پیدا نشد."
+        f"✅ {amount:,} به موجودی کاربر {code} اضافه شد."
     )
 
 
 # ==================================================
-# ADMIN REMOVE MONEY
+# کاهش پول
 # ==================================================
 
 @bot.callback_query_handler(
-    func=lambda c: c.data == "admin_removemoney"
+    func=lambda call: call.data == "admin_remove_money"
 )
-def remove_money(call):
+def admin_remove_money(call):
 
     if not is_admin(call.from_user.id):
         return
 
+    bot.answer_callback_query(
+        call.id
+    )
+
     msg = bot.send_message(
         call.message.chat.id,
-        "شماره کاربر و مبلغ را بفرست."
+        "💸 به این شکل وارد کن:\n\n"
+        "کد کاربر مبلغ\n\n"
+        "مثال:\n"
+        "0001 50000"
     )
 
     bot.register_next_step_handler(
@@ -1219,42 +1514,63 @@ def process_remove_money(message):
 
     except:
 
+        bot.send_message(
+            message.chat.id,
+            "❌ فرمت اشتباه است."
+        )
+
         return
+
+    target = None
 
     for user in users.values():
 
         if user["code"] == code:
+            target = user
+            break
 
-            user["balance"] = max(
-                0,
-                user["balance"] - amount
-            )
+    if not target:
 
-            bot.send_message(
-                message.chat.id,
-                "✅ موجودی کم شد."
-            )
+        bot.send_message(
+            message.chat.id,
+            "❌ کاربر پیدا نشد."
+        )
 
-            return
+        return
+
+    target["balance"] = max(
+        0,
+        target["balance"] - amount
+    )
+
+    bot.send_message(
+        message.chat.id,
+        f"✅ {amount:,} از موجودی کاربر {code} کم شد."
+    )
 
 
 # ==================================================
-# ADMIN XP
+# تغییر XP
 # ==================================================
 
 @bot.callback_query_handler(
-    func=lambda c: c.data == "admin_xp"
+    func=lambda call: call.data == "admin_xp"
 )
 def admin_xp(call):
 
     if not is_admin(call.from_user.id):
         return
 
+    bot.answer_callback_query(
+        call.id
+    )
+
     msg = bot.send_message(
         call.message.chat.id,
-        "شماره کاربر و XP را بفرست.\n\n"
+        "⭐ به این شکل وارد کن:\n\n"
+        "کد کاربر مقدار XP\n\n"
         "مثال:\n"
-        "1234 500"
+        "0001 500"
     )
 
     bot.register_next_step_handler(
@@ -1276,40 +1592,63 @@ def process_xp(message):
 
     except:
 
+        bot.send_message(
+            message.chat.id,
+            "❌ فرمت اشتباه است."
+        )
+
         return
+
+    target = None
 
     for user in users.values():
 
         if user["code"] == code:
+            target = user
+            break
 
-            user["xp"] = max(
-                0,
-                user["xp"] + amount
-            )
+    if not target:
 
-            bot.send_message(
-                message.chat.id,
-                "✅ XP تغییر کرد."
-            )
+        bot.send_message(
+            message.chat.id,
+            "❌ کاربر پیدا نشد."
+        )
 
-            return
+        return
+
+    add_xp(
+        target["id"],
+        amount
+    )
+
+    bot.send_message(
+        message.chat.id,
+        f"✅ {amount} XP به کاربر {code} اضافه شد."
+    )
 
 
 # ==================================================
-# ADMIN COINS
+# تغییر سکه
 # ==================================================
 
 @bot.callback_query_handler(
-    func=lambda c: c.data == "admin_coins"
+    func=lambda call: call.data == "admin_coins"
 )
 def admin_coins(call):
 
     if not is_admin(call.from_user.id):
         return
 
+    bot.answer_callback_query(
+        call.id
+    )
+
     msg = bot.send_message(
         call.message.chat.id,
-        "شماره کاربر و مقدار سکه را بفرست."
+        "🪙 به این شکل وارد کن:\n\n"
+        "کد کاربر مقدار\n\n"
+        "مثال:\n"
+        "0001 1000"
     )
 
     bot.register_next_step_handler(
@@ -1331,53 +1670,63 @@ def process_coins(message):
 
     except:
 
+        bot.send_message(
+            message.chat.id,
+            "❌ فرمت اشتباه است."
+        )
+
         return
+
+    target = None
 
     for user in users.values():
 
         if user["code"] == code:
+            target = user
+            break
 
-            user["coins"] = max(
-                0,
-                user["coins"] + amount
-            )
+    if not target:
 
-            bot.send_message(
-                message.chat.id,
-                "✅ سکه تغییر کرد."
-            )
+        bot.send_message(
+            message.chat.id,
+            "❌ کاربر پیدا نشد."
+        )
 
-            return
+        return
+
+    target["coins"] += amount
+
+    if target["coins"] < 0:
+        target["coins"] = 0
+
+    bot.send_message(
+        message.chat.id,
+        f"✅ سکه کاربر {code} تغییر کرد."
+    )
 
 
 # ==================================================
-# ADMIN RANK
+# تغییر رتبه
 # ==================================================
 
 @bot.callback_query_handler(
-    func=lambda c: c.data == "admin_rank"
+    func=lambda call: call.data == "admin_rank"
 )
 def admin_rank(call):
 
     if not is_admin(call.from_user.id):
         return
 
+    bot.answer_callback_query(
+        call.id
+    )
+
     msg = bot.send_message(
         call.message.chat.id,
-        """
-شماره کاربر و رتبه را بفرست.
-
-مثال:
-
-1234 Gold
-
-رتبه‌ها:
-
-Member
-Silver
-Gold
-Diamond
-"""
+        "👑 به این شکل وارد کن:\n\n"
+        "کد کاربر رتبه\n\n"
+        "مثال:\n"
+        "0001 Gold"
     )
 
     bot.register_next_step_handler(
@@ -1397,61 +1746,57 @@ def process_rank(message):
 
     except:
 
-        return
-
-    if rank not in [
-        "Member",
-        "Silver",
-        "Gold",
-        "Diamond"
-    ]:
-
         bot.send_message(
             message.chat.id,
-            "❌ رتبه اشتباه."
+            "❌ فرمت اشتباه است."
         )
 
         return
 
+    target = None
+
     for user in users.values():
 
         if user["code"] == code:
+            target = user
+            break
 
-            user["rank"] = rank
+    if not target:
 
-            bot.send_message(
-                message.chat.id,
-                "✅ رتبه تغییر کرد."
-            )
+        bot.send_message(
+            message.chat.id,
+            "❌ کاربر پیدا نشد."
+        )
 
-            return
+        return
+
+    target["rank"] = rank
+
+    bot.send_message(
+        message.chat.id,
+        f"👑 رتبه کاربر {code} شد: {rank}"
+    )
 
 
 # ==================================================
-# ADMIN BAN
+# بن کاربر
 # ==================================================
 
 @bot.callback_query_handler(
-    func=lambda c: c.data == "admin_ban"
+    func=lambda call: call.data == "admin_ban"
 )
 def admin_ban(call):
 
     if not is_admin(call.from_user.id):
         return
 
+    bot.answer_callback_query(
+        call.id
+    )
+
     msg = bot.send_message(
         call.message.chat.id,
-        """
-شماره کاربر و وضعیت را بفرست.
-
-مثال:
-
-1234 ban
-
-یا:
-
-1234 unban
-"""
+        "🚫 کد کاربر را وارد کن:"
     )
 
     bot.register_next_step_handler(
@@ -1465,122 +1810,149 @@ def process_ban(message):
     if not is_admin(message.from_user.id):
         return
 
-    try:
+    code = message.text.strip()
 
-        code, action = message.text.split()
-
-    except:
-
-        return
+    target = None
 
     for user in users.values():
 
         if user["code"] == code:
+            target = user
+            break
 
-            user["banned"] = (
-                action.lower() == "ban"
-            )
+    if not target:
 
-            bot.send_message(
-                message.chat.id,
-                "✅ انجام شد."
-            )
+        bot.send_message(
+            message.chat.id,
+            "❌ کاربر پیدا نشد."
+        )
 
-            return
+        return
+
+    target["banned"] = not target["banned"]
+
+    status = (
+        "🚫 بن شد"
+        if target["banned"]
+        else "✅ از بن خارج شد"
+    )
+
+    bot.send_message(
+        message.chat.id,
+        f"کاربر {code}: {status}"
+    )
 
 
 # ==================================================
-# ADMIN BROADCAST
+# پیام همگانی
 # ==================================================
 
 @bot.callback_query_handler(
-    func=lambda c: c.data == "admin_broadcast"
+    func=lambda call: call.data == "admin_broadcast"
 )
-def broadcast(call):
+def admin_broadcast(call):
 
     if not is_admin(call.from_user.id):
         return
 
+    bot.answer_callback_query(
+        call.id
+    )
+
     msg = bot.send_message(
         call.message.chat.id,
-        "📢 پیام همگانی را بفرست:"
+        "📢 پیام همگانی را بنویس:"
     )
 
     bot.register_next_step_handler(
         msg,
-        send_broadcast
+        process_broadcast
     )
 
 
-def send_broadcast(message):
+def process_broadcast(message):
 
     if not is_admin(message.from_user.id):
         return
 
-    sent = 0
+    success = 0
 
-    for user in users.values():
+    for user_id in list(users.keys()):
 
         try:
 
             bot.send_message(
-                user["id"],
-                "📢 پیام مدیریت:\n\n"
-                + message.text
+                user_id,
+                f"📢 پیام مدیریت:\n\n{message.text}"
             )
 
-            sent += 1
-
-            time.sleep(0.05)
+            success += 1
 
         except:
             pass
 
     bot.send_message(
         message.chat.id,
-        f"✅ برای {sent} نفر ارسال شد."
+        f"✅ پیام برای {success} کاربر ارسال شد."
     )
 
 
 # ==================================================
-# ADMIN REPORTS
+# گزارش‌ها
 # ==================================================
 
 @bot.callback_query_handler(
-    func=lambda c: c.data == "admin_reports"
+    func=lambda call: call.data == "admin_reports"
 )
 def admin_reports(call):
 
     if not is_admin(call.from_user.id):
         return
 
+    bot.answer_callback_query(
+        call.id
+    )
+
     if not reports:
 
         bot.send_message(
             call.message.chat.id,
-            "✅ گزارشی وجود ندارد."
+            "🚨 گزارشی وجود ندارد."
         )
 
         return
 
     text = "🚨 گزارش‌ها\n\n"
 
-    for r in reports:
+    for index, report in enumerate(
+        reports,
+        1
+    ):
 
         reporter = users.get(
-            r["reporter"]
+            report["reporter"]
         )
 
         reported = users.get(
-            r["reported"]
+            report["reported"]
+        )
+
+        reporter_code = (
+            reporter["code"]
+            if reporter
+            else "نامشخص"
+        )
+
+        reported_code = (
+            reported["code"]
+            if reported
+            else "نامشخص"
         )
 
         text += (
-            f"👤 گزارش‌دهنده: "
-            f"{reporter['name'] if reporter else '?'}\n"
-            f"🚨 کاربر: "
-            f"{reported['name'] if reported else '?'}\n"
-            f"━━━━━━━━━━━━\n"
+            f"{index}. "
+            f"گزارش‌دهنده: {reporter_code}\n"
+            f"متهم: {reported_code}\n\n"
         )
 
     bot.send_message(
@@ -1590,73 +1962,11 @@ def admin_reports(call):
 
 
 # ==================================================
-# تنظیمات
+# اجرای بات
 # ==================================================
 
-@bot.message_handler(
-    func=lambda m: m.text == "⚙️ تنظیمات"
-)
-def settings(message):
-
-    bot.send_message(
-        message.chat.id,
-        """
-⚙️ تنظیمات
-
-🔔 اعلان‌ها
-🛡️ حریم خصوصی
-🚫 کاربران مسدودشده
-
-نسخه آزمایشی.
-"""
-    )
-
-
-# ==================================================
-# جوایز
-# ==================================================
-
-@bot.message_handler(
-    func=lambda m: m.text == "🎁 جوایز"
-)
-def rewards(message):
-
-    user = get_user(
-        message.from_user.id
-    )
-
-    needed = xp_needed(
-        user["level"]
-    )
-
-    remaining = max(
-        0,
-        needed - user["xp"]
-    )
-
-    bot.send_message(
-        message.chat.id,
-        f"""
-🎁 جوایز
-
-⭐ Level:
-{user['level']}
-
-✨ XP باقی‌مانده:
-{remaining}
-
-🎁 با Level بالاتر سکه جایزه می‌گیری!
-"""
-    )
-
-
-# ==================================================
-# اجرا
-# ==================================================
-
-print("🔥 STREAMER BOT STARTED")
+print("Bot is running...")
 
 bot.infinity_polling(
-    timeout=60,
-    long_polling_timeout=60
+    skip_pending=True
 )
