@@ -7,7 +7,7 @@ import random
 # تنظیمات
 # =========================
 
-TOKEN = "8859824190:AAHbdkUd6lc6PSmu8fJQGVJ8mFc9PaIzCZA"
+TOKEN = "8802163316:AAHJhO6ZXnVD4VzgZONCjE76YD3Zn1Pg8tM"
 
 # آیدی عددی تلگرام خودت را اینجا بگذار
 ADMIN_ID = 7723971526
