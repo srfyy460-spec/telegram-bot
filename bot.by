@@ -9,7 +9,7 @@ from telebot import types
 # تنظیمات
 # =========================
 
-TOKEN = os.getenv("BOT_TOKEN", "TOKEN_HERE")
+TOKEN = os.getenv("8978005144:AAH3uykYkjLNfAC-lEgmGa3FJrezq38qUp4")
 ADMIN_ID = 7723971526
 
 bot = telebot.TeleBot(TOKEN, parse_mode="HTML")
