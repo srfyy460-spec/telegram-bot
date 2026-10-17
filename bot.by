@@ -1,1447 +1,1534 @@
-import os
-import random
-from datetime import datetime, timedelta
+# -*- coding: utf-8 -*-
+# چت ناشناس | نسخه تک‌فایلی
+# کتابخانه:
+# pip install pyTelegramBotAPI
 
 import telebot
 from telebot import types
+from datetime import datetime, timedelta
+import random
+import threading
+import time
+import re
 
-# =========================
-# تنظیمات
-# =========================
+# ============================================================
+# فقط این قسمت را تغییر بده
+# ============================================================
 
-TOKEN = os.getenv("8978005144:AAH3uykYkjLNfAC-lEgmGa3FJrezq38qUp4")
+TOKEN = "8978005144:AAGUPfhRMcaOBXxXpIobSY2IKNJvHoV29zM"
 ADMIN_ID = 7723971526
+BOT_USERNAME = "chat_iranian_bot"
+
+# ============================================================
+# تنظیمات
+# ============================================================
+
+BOT_NAME = "چت ناشناس"
+WELCOME_COINS = 100
+ONLINE_MINUTES = 10
+ACCOUNT_CODE_MAX = 100000
 
 bot = telebot.TeleBot(TOKEN, parse_mode="HTML")
 
-# =========================
-# دیتای موقت
-# =========================
+# ============================================================
+# حافظه موقت
+# توجه: با ری‌استارت شدن بات همه اطلاعات پاک می‌شود.
+# ============================================================
 
 users = {}
+chats = {}
 waiting_users = []
-active_chats = {}
-
 reports = []
+warnings = []
+admin_logs = []
 reviews = []
 suggestions = []
-admin_actions = []
+transactions = []
+messages_log = []
+blocks = {}
+temp_bans = {}
+giveaways = {}
+challenges = {}
+missions = {}
+ratings = []
 
-giveaways = []
-challenges = []
+pending = {}
+user_last_activity = {}
 
-states = {}
-games = {}
-
-# =========================
+# ============================================================
 # رنک‌ها
-# =========================
+# ============================================================
 
 RANKS = {
-    "bronze": {
-        "title": "🥉 برنز",
-        "priority": 1,
-        "price": 0
-    },
-
-    "silver": {
-        "title": "🥈 نقره‌ای",
-        "priority": 2,
-        "price": 50000
-    },
-
-    "gold": {
-        "title": "🥇 طلایی",
-        "priority": 3,
-        "price": 150000
-    },
-
-    "diamond": {
-        "title": "💎 الماسی",
-        "priority": 4,
-        "price": 500000
-    },
-
-    "vip": {
-        "title": "👑 VIP",
-        "priority": 5,
-        "price": 1500000
-    },
-
-    "moderator": {
-        "title": "Moderator",
-        "priority": 100,
+    "member": {
+        "name": "ممبر",
         "price": 0,
-        "special": True
+        "days": 0,
+        "priority": 0
+    },
+    "silver": {
+        "name": "🥈 سیلور",
+        "price": 500,
+        "days": 30,
+        "priority": 10
+    },
+    "gold": {
+        "name": "🥇 گلد",
+        "price": 1600,
+        "days": 30,
+        "priority": 20
+    },
+    "diamond": {
+        "name": "💎 دایموند",
+        "price": 3500,
+        "days": 30,
+        "priority": 30
+    },
+    "vip": {
+        "name": "👑 VIP",
+        "price": 7000,
+        "days": 30,
+        "priority": 40
+    },
+    "moderator": {
+        "name": "Moderator",
+        "price": 0,
+        "days": 0,
+        "priority": 100
     }
 }
 
-# =========================
+# ============================================================
 # ابزارها
-# =========================
+# ============================================================
 
 def now():
     return datetime.now()
 
 
-def is_admin(user_id):
-    return user_id == ADMIN_ID
+def touch(uid):
+    user_last_activity[uid] = now()
 
 
-def ensure_user(tg_user):
+def is_admin(uid):
+    return uid == ADMIN_ID
 
-    user_id = tg_user.id
 
-    if user_id not in users:
+def is_banned(uid):
+    if uid in temp_bans:
+        if now() < temp_bans[uid]["until"]:
+            return True
+        del temp_bans[uid]
 
-        users[user_id] = {
+    if uid in users:
+        return users[uid].get("banned", False)
 
-            "id": user_id,
+    return False
 
-            "username": tg_user.username or "",
 
-            "first_name": tg_user.first_name or "",
-
-            "last_name": tg_user.last_name or "",
-
-            "phone": "",
-
-            "code": f"{len(users) + 1:04d}",
-
-            "coins": 100,
-
-            # فقط اعتبار مجازی
-            "balance": 0,
-
-            "xp": 0,
-
-            "level": 1,
-
-            "ranks": [
-                {
-                    "name": "bronze",
-                    "expires": now() + timedelta(days=30)
-                }
-            ],
-
-            "messages": 0,
-
-            "chats": 0,
-
-            "referrals": 0,
-
-            "warnings": 0,
-
-            "banned_until": None,
-
-            "created_at": now(),
-
-            "last_activity": now(),
-
-            "anonymous": True,
-
-            "photo_file_id": None
-        }
-
-    else:
-
-        users[user_id]["username"] = (
-            tg_user.username or users[user_id]["username"]
-        )
-
-        users[user_id]["first_name"] = (
-            tg_user.first_name or users[user_id]["first_name"]
-        )
-
-        users[user_id]["last_name"] = (
-            tg_user.last_name or users[user_id]["last_name"]
-        )
-
-        users[user_id]["last_activity"] = now()
-
-    return users[user_id]
-
-
-def active_ranks(user_id):
-
-    user = users[user_id]
-
-    valid = []
-
-    for rank in user["ranks"]:
-
-        if rank["expires"] > now():
-            valid.append(rank)
-
-    user["ranks"] = valid
-
-    return valid
-
-
-def visible_rank(user_id):
-
-    ranks = active_ranks(user_id)
-
-    if not ranks:
-        return "bronze"
-
-    return max(
-        ranks,
-        key=lambda x: RANKS[x["name"]]["priority"]
-    )["name"]
-
-
-def rank_title(user_id):
-
-    return RANKS[
-        visible_rank(user_id)
-    ]["title"]
-
-
-def display_name(user_id):
-
-    user = users.get(user_id, {})
-
-    return (
-        user.get("first_name")
-        or user.get("username")
-        or str(user_id)
-    )
-
-
-def level_up(user):
-
-    needed = user["level"] * 100
-
-    while user["xp"] >= needed:
-
-        user["xp"] -= needed
-
-        user["level"] += 1
-
-        needed = user["level"] * 100
-
-
-def add_xp(user_id, amount):
-
-    user = users[user_id]
-
-    old_level = user["level"]
-
-    user["xp"] += amount
-
-    level_up(user)
-
-    if user["level"] > old_level:
-
-        notify_user(
-            user_id,
-            f"🎉 تبریک!\n"
-            f"به سطح <b>{user['level']}</b> رسیدی."
-        )
-
-
-def banned(user_id):
-
-    user = users.get(user_id)
-
-    if not user:
-        return False
-
-    until = user.get("banned_until")
-
-    if until is None:
-        return False
-
-    # بن دائمی
-    if until is False:
+def is_moderator(uid):
+    if is_admin(uid):
         return True
 
-    if until <= now():
-
-        user["banned_until"] = None
-
+    u = users.get(uid)
+    if not u:
         return False
 
-    return True
-
-
-def notify_user(user_id, text):
-
-    try:
-
-        bot.send_message(
-            user_id,
-            text
-        )
-
-    except Exception:
-
-        pass
-
-
-def admin_log(
-    action,
-    target_id=None,
-    old=None,
-    new=None,
-    note=""
-):
-
-    admin_actions.append({
-
-        "admin": ADMIN_ID,
-
-        "target": target_id,
-
-        "action": action,
-
-        "old": old,
-
-        "new": new,
-
-        "note": note,
-
-        "time": now()
-    })
-
-
-# =========================
-# منوی اصلی
-# =========================
-
-def main_menu(user_id):
-
-    keyboard = types.ReplyKeyboardMarkup(
-        resize_keyboard=True
-    )
-
-    keyboard.row(
-        "💬 چت",
-        "👤 پروفایل"
-    )
-
-    keyboard.row(
-        "🪙 سکه",
-        "⭐ رنک‌ها"
-    )
-
-    keyboard.row(
-        "🎮 بازی",
-        "🎯 مأموریت‌ها"
-    )
-
-    keyboard.row(
-        "🎁 قرعه‌کشی",
-        "🏆 چالش‌ها"
-    )
-
-    keyboard.row(
-        "📊 آمار",
-        "💡 پیشنهاد/نظر"
-    )
-
-    keyboard.row(
-        "🚫 پایان چت",
-        "❓ راهنما"
-    )
-
-    if is_admin(user_id):
-
-        keyboard.row(
-            "🛠 پنل مدیریت"
-        )
-
-    return keyboard
-
-
-# =========================
-# پنل مدیریت
-# =========================
-
-def admin_menu():
-
-    keyboard = types.ReplyKeyboardMarkup(
-        resize_keyboard=True
-    )
-
-    buttons = [
-
-        "📊 داشبورد",
-        "👥 کاربران",
-
-        "🔎 جستجوی کاربر",
-        "🚨 گزارش‌ها",
-
-        "🛡️ ناظران",
-        "⚠️ هشدارها",
-
-        "🪙 مدیریت سکه",
-        "💰 مدیریت اعتبار",
-
-        "⭐ مدیریت XP",
-        "🏆 مدیریت رنک",
-
-        "🎁 قرعه‌کشی",
-        "🎯 چالش‌ها",
-
-        "📢 پیام همگانی",
-        "📣 اعلان‌ها",
-
-        "💬 نظرات",
-        "💡 پیشنهادات",
-
-        "📈 آمار",
-        "📋 لاگ مدیریت",
-
-        "💬 چت‌های فعال",
-        "🔍 جستجوی پیام",
-
-        "🚫 مسدود/رفع",
-        "⏱️ بن زمان‌دار",
-
-        "🎟️ جوایز",
-        "🎮 مدیریت بازی‌ها",
-
-        "🎯 مدیریت مأموریت‌ها",
-        "🏅 تنظیم رنک‌ها",
-
-        "🧹 پاکسازی",
-        "⚙️ تنظیمات بات",
-
-        "🔐 امنیت",
-        "📤 خروجی آمار",
-
-        "⬅️ بازگشت"
-    ]
-
-    for i in range(0, len(buttons), 2):
-
-        keyboard.row(
-            *buttons[i:i + 2]
-        )
-
-    return keyboard
-
-
-# =========================
-# START
-# =========================
-
-@bot.message_handler(commands=["start"])
-def start(message):
-
-    user = ensure_user(
-        message.from_user
-    )
-
-    if banned(message.from_user.id):
-
-        bot.reply_to(
-            message,
-            "🚫 حساب شما مسدود یا محدود است."
-        )
-
-        return
-
-    bot.send_message(
-
-        message.chat.id,
-
-        f"سلام <b>{user['first_name'] or 'دوست من'}</b> 👋\n\n"
-
-        f"به <b>چت ناشناس</b> خوش اومدی! 🤍\n\n"
-
-        f"🔢 کد حساب: "
-        f"<code>{user['code']}</code>\n"
-
-        f"🪙 سکه: "
-        f"{user['coins']}\n"
-
-        f"🏆 رنک: "
-        f"{rank_title(user['id'])}",
-
-        reply_markup=main_menu(
-            user["id"]
-        )
-    )
-
-
-# =========================
-# پروفایل
-# =========================
-
-@bot.message_handler(
-    func=lambda m: m.text == "👤 پروفایل"
-)
-def profile(message):
-
-    user = ensure_user(
-        message.from_user
-    )
-
-    ranks = active_ranks(
-        user["id"]
-    )
-
-    rank_list = []
-
-    for rank in ranks:
-
-        rank_list.append(
-            f"• {RANKS[rank['name']]['title']} "
-            f"تا {rank['expires'].strftime('%Y-%m-%d')}"
-        )
-
-    if not rank_list:
-
-        rank_list.append(
-            "• بدون رنک"
-        )
-
-    text = (
-
-        "👤 <b>پروفایل شما</b>\n\n"
-
-        f"نام: "
-        f"{user['first_name']} "
-        f"{user['last_name']}\n"
-
-        f"یوزرنیم: "
-        f"@{user['username'] or 'ندارد'}\n"
-
-        f"🔢 کد حساب: "
-        f"<code>{user['code']}</code>\n"
-
-        f"⭐ سطح: "
-        f"{user['level']}\n"
-
-        f"XP: "
-        f"{user['xp']}\n"
-
-        f"🪙 سکه: "
-        f"{user['coins']}\n"
-
-        f"💰 اعتبار مجازی: "
-        f"{user['balance']:,} تومان\n"
-
-        f"💬 پیام‌ها: "
-        f"{user['messages']}\n"
-
-        f"👥 چت‌ها: "
-        f"{user['chats']}\n"
-
-        f"🎁 دعوت‌ها: "
-        f"{user['referrals']}\n"
-
-        f"⚠️ هشدارها: "
-        f"{user['warnings']}\n\n"
-
-        "🏆 <b>رنک‌های فعال:</b>\n"
-
-        + "\n".join(rank_list)
-
-        + "\n\n"
-        "🔒 اعتبار تومان فقط مجازی است "
-        "و قابل برداشت پول واقعی نیست."
-    )
-
-    bot.send_message(
-        message.chat.id,
-        text
-    )
-
-
-# =========================
-# سکه
-# =========================
-
-@bot.message_handler(
-    func=lambda m: m.text == "🪙 سکه"
-)
-def coins(message):
-
-    user = ensure_user(
-        message.from_user
-    )
-
-    bot.send_message(
-
-        message.chat.id,
-
-        f"🪙 سکه: "
-        f"<b>{user['coins']}</b>\n\n"
-
-        f"💰 اعتبار مجازی: "
-        f"<b>{user['balance']:,}</b> تومان\n\n"
-
-        "⚠️ این اعتبار قابل برداشت "
-        "و تبدیل به پول واقعی نیست."
-    )
-
-
-# =========================
-# رنک‌ها
-# =========================
-
-@bot.message_handler(
-    func=lambda m: m.text == "⭐ رنک‌ها"
-)
-def ranks(message):
-
-    ensure_user(
-        message.from_user
-    )
-
-    text = (
-        "🏆 <b>فروشگاه رنک</b>\n\n"
-        "تمام رنک‌های خریداری‌شده "
-        "۳۰ روز فعال هستند.\n\n"
-    )
-
-    keyboard = types.InlineKeyboardMarkup()
-
-    for key, rank in RANKS.items():
-
-        if key == "moderator":
-            continue
-
-        text += (
-            f"{rank['title']} — "
-            f"{rank['price']:,} سکه\n"
-        )
-
-        keyboard.add(
-
-            types.InlineKeyboardButton(
-
-                f"خرید {rank['title']}",
-
-                callback_data=f"buy_rank:{key}"
-            )
-        )
-
-    text += (
-        "\n🛡️ Moderator فقط توسط مدیریت "
-        "فعال می‌شود."
-    )
-
-    bot.send_message(
-        message.chat.id,
-        text,
-        reply_markup=keyboard
-    )
-
-
-@bot.callback_query_handler(
-    func=lambda c: c.data.startswith("buy_rank:")
-)
-def buy_rank(call):
-
-    user = ensure_user(
-        call.from_user
-    )
-
-    rank_name = call.data.split(
-        ":",
-        1
-    )[1]
-
-    rank = RANKS[rank_name]
-
-    if user["coins"] < rank["price"]:
-
-        bot.answer_callback_query(
-            call.id,
-            "❌ سکه کافی نیست.",
-            show_alert=True
-        )
-
-        return
-
-    user["coins"] -= rank["price"]
-
-    user["ranks"].append({
-
-        "name": rank_name,
-
-        "expires":
-            now() + timedelta(days=30)
-    })
-
-    bot.answer_callback_query(
-        call.id,
-        "✅ رنک خریداری شد."
-    )
-
-    bot.send_message(
-
-        call.from_user.id,
-
-        f"🎉 رنک "
-        f"<b>{rank['title']}</b> "
-        f"برای ۳۰ روز فعال شد."
-    )
-
-
-# =========================
-# چت
-# =========================
-
-@bot.message_handler(
-    func=lambda m: m.text == "💬 چت"
-)
-def start_chat(message):
-
-    user = ensure_user(
-        message.from_user
-    )
-
-    uid = user["id"]
-
-    if banned(uid):
-
-        bot.send_message(
-            uid,
-            "🚫 شما اجازه چت ندارید."
-        )
-
-        return
-
-    if uid in active_chats:
-
-        bot.send_message(
-            uid,
-            "💬 شما همین الان داخل چت هستید."
-        )
-
-        return
-
-    if uid not in waiting_users:
-
-        waiting_users.append(uid)
-
-    if len(waiting_users) >= 2:
-
-        first = waiting_users.pop(0)
-
-        second = waiting_users.pop(0)
-
-        if first == second:
-            return
-
-        active_chats[first] = second
-
-        active_chats[second] = first
-
-        users[first]["chats"] += 1
-
-        users[second]["chats"] += 1
-
-        bot.send_message(
-            first,
-            "✅ یک نفر پیدا شد!\n\n"
-            "پیامت رو بفرست 💬\n"
-            "برای خروج: 🚫 پایان چت"
-        )
-
-        bot.send_message(
-            second,
-            "✅ یک نفر پیدا شد!\n\n"
-            "پیامت رو بفرست 💬\n"
-            "برای خروج: 🚫 پایان چت"
-        )
-
-    else:
-
-        bot.send_message(
-            uid,
-            "🔎 در حال پیدا کردن یک نفر..."
-        )
-
-
-# =========================
-# پایان چت
-# =========================
-
-@bot.message_handler(
-    func=lambda m: m.text == "🚫 پایان چت"
-)
-def end_chat(message):
-
-    uid = ensure_user(
-        message.from_user
-    )["id"]
-
-    partner = active_chats.pop(
-        uid,
-        None
-    )
-
-    if partner:
-
-        active_chats.pop(
-            partner,
-            None
-        )
-
-        bot.send_message(
-            partner,
-            "❌ طرف مقابل چت را پایان داد."
-        )
-
-        bot.send_message(
-            uid,
-            "❌ چت پایان یافت."
-        )
-
-    else:
-
-        if uid in waiting_users:
-            waiting_users.remove(uid)
-
-        bot.send_message(
-            uid,
-            "چت فعالی ندارید."
-        )
-
-
-# =========================
-# انتقال پیام
-# =========================
-
-def relay_message(message):
-
-    uid = message.from_user.id
-
-    if uid not in active_chats:
-        return False
-
-    partner = active_chats[uid]
-
-    users[uid]["messages"] += 1
-
-    add_xp(
-        uid,
-        2
-    )
-
-    try:
-
-        if message.content_type == "text":
-
-            bot.send_message(
-                partner,
-                f"🕵️ ناشناس:\n\n"
-                f"{message.text}"
-            )
-
-        elif message.content_type == "photo":
-
-            bot.send_photo(
-                partner,
-                message.photo[-1].file_id,
-                caption=message.caption or ""
-            )
-
-        elif message.content_type == "video":
-
-            bot.send_video(
-                partner,
-                message.video.file_id,
-                caption=message.caption or ""
-            )
-
-        elif message.content_type == "voice":
-
-            bot.send_voice(
-                partner,
-                message.voice.file_id
-            )
-
-        elif message.content_type == "document":
-
-            bot.send_document(
-                partner,
-                message.document.file_id,
-                caption=message.caption or ""
-            )
-
-        else:
-
-            bot.copy_message(
-                partner,
-                message.chat.id,
-                message.message_id
-            )
-
-        return True
-
-    except Exception:
-
-        bot.send_message(
-            uid,
-            "⚠️ ارسال پیام ناموفق بود."
-        )
-
-        return True
-
-
-# =========================
-# بازی
-# =========================
-
-@bot.message_handler(
-    func=lambda m: m.text == "🎮 بازی"
-)
-def game(message):
-
-    user = ensure_user(
-        message.from_user
-    )
-
-    number = random.randint(
-        1,
-        5
-    )
-
-    games[user["id"]] = number
-
-    states[user["id"]] = {
-        "type": "guess"
-    }
-
-    bot.send_message(
-
-        user["id"],
-
-        "🎮 <b>حدس عدد</b>\n\n"
-
-        "یک عدد بین ۱ تا ۵ بفرست.\n\n"
-
-        "🎁 جایزه برد:\n"
-        "🪙 ۲۰ سکه\n"
-        "⭐ ۱۰ XP"
-    )
-
-
-# =========================
-# مأموریت
-# =========================
-
-@bot.message_handler(
-    func=lambda m: m.text == "🎯 مأموریت‌ها"
-)
-def missions(message):
-
-    ensure_user(
-        message.from_user
-    )
-
-    bot.send_message(
-
-        message.chat.id,
-
-        "🎯 <b>مأموریت‌ها</b>\n\n"
-
-        "1️⃣ ارسال ۱۰ پیام\n"
-        "🎁 جایزه: ۵۰ سکه\n\n"
-
-        "2️⃣ انجام ۳ چت\n"
-        "🎁 جایزه: ۷۵ سکه\n\n"
-
-        "3️⃣ ورود روزانه\n"
-        "🎁 جایزه: ۵۰ سکه"
-    )
-
-
-# =========================
-# قرعه‌کشی
-# =========================
-
-@bot.message_handler(
-    func=lambda m: m.text == "🎁 قرعه‌کشی"
-)
-def giveaways_list(message):
-
-    ensure_user(
-        message.from_user
-    )
-
-    if not giveaways:
-
-        bot.send_message(
-            message.chat.id,
-            "🎁 فعلاً قرعه‌کشی فعالی وجود ندارد."
-        )
-
-        return
-
-    for giveaway in giveaways:
-
-        bot.send_message(
-
-            message.chat.id,
-
-            f"🎁 <b>{giveaway['title']}</b>\n\n"
-
-            f"{giveaway['description']}\n\n"
-
-            f"🏆 جایزه: "
-            f"{giveaway['prize']}\n"
-
-            f"👥 شرکت‌کنندگان: "
-            f"{len(giveaway['entries'])}"
-        )
-
-
-# =========================
-# چالش‌ها
-# =========================
-
-@bot.message_handler(
-    func=lambda m: m.text == "🏆 چالش‌ها"
-)
-def challenges_list(message):
-
-    ensure_user(
-        message.from_user
-    )
-
-    if not challenges:
-
-        bot.send_message(
-            message.chat.id,
-            "🏆 فعلاً چالشی فعال نیست."
-        )
-
-        return
-
-    for challenge in challenges:
-
-        bot.send_message(
-
-            message.chat.id,
-
-            f"🏆 <b>{challenge['title']}</b>\n\n"
-
-            f"{challenge['description']}\n\n"
-
-            f"نوع: {challenge['kind']}\n"
-
-            f"جایزه: {challenge['prize']}"
-        )
-
-
-# =========================
-# آمار
-# =========================
-
-@bot.message_handler(
-    func=lambda m: m.text == "📊 آمار"
-)
-def stats(message):
-
-    user = ensure_user(
-        message.from_user
-    )
-
-    bot.send_message(
-
-        message.chat.id,
-
-        "📊 <b>آمار شما</b>\n\n"
-
-        f"⭐ سطح: {user['level']}\n"
-
-        f"XP: {user['xp']}\n"
-
-        f"💬 پیام‌ها: {user['messages']}\n"
-
-        f"👥 چت‌ها: {user['chats']}\n"
-
-        f"🎁 دعوت‌ها: {user['referrals']}"
-    )
-
-
-# =========================
-# پیشنهاد و نظر
-# =========================
-
-@bot.message_handler(
-    func=lambda m: m.text == "💡 پیشنهاد/نظر"
-)
-def feedback(message):
-
-    ensure_user(
-        message.from_user
-    )
-
-    keyboard = types.InlineKeyboardMarkup()
-
-    keyboard.add(
-
-        types.InlineKeyboardButton(
-            "💬 ثبت نظر",
-            callback_data="feedback:review"
-        )
-    )
-
-    keyboard.add(
-
-        types.InlineKeyboardButton(
-            "💡 ارسال پیشنهاد",
-            callback_data="feedback:suggestion"
-        )
-    )
-
-    bot.send_message(
-        message.chat.id,
-        "یکی را انتخاب کن:",
-        reply_markup=keyboard
-    )
-
-
-@bot.callback_query_handler(
-    func=lambda c: c.data.startswith("feedback:")
-)
-def feedback_type(call):
-
-    kind = call.data.split(
-        ":",
-        1
-    )[1]
-
-    states[call.from_user.id] = {
-        "type": kind
-    }
-
-    bot.answer_callback_query(
-        call.id
-    )
-
-    bot.send_message(
-        call.from_user.id,
-        "✍️ متن خودت را بفرست:"
-    )
-
-
-# =========================
-# راهنما
-# =========================
-
-@bot.message_handler(
-    func=lambda m: m.text == "❓ راهنما"
-)
-def help_command(message):
-
-    bot.send_message(
-
-        message.chat.id,
-
-        "❓ <b>راهنمای چت ناشناس</b>\n\n"
-
-        "💬 چت — پیدا کردن فرد برای گفتگو\n"
-        "👤 پروفایل — اطلاعات حساب\n"
-        "🪙 سکه — موجودی\n"
-        "⭐ رنک‌ها — خرید رنک\n"
-        "🎮 بازی — بازی و دریافت جایزه\n"
-        "🎯 مأموریت‌ها — مأموریت‌ها\n"
-        "🎁 قرعه‌کشی — قرعه‌کشی‌ها\n"
-        "🏆 چالش‌ها — چالش‌ها\n"
-        "📊 آمار — آمار حساب\n\n"
-
-        "/daily — جایزه روزانه\n"
-        "/report — گزارش تخلف\n"
-        "/end — پایان چت"
-    )
-
-
-# =========================
-# پنل مدیریت
-# =========================
-
-@bot.message_handler(
-    func=lambda m: m.text == "🛠 پنل مدیریت"
-)
-def admin_panel(message):
-
-    if not is_admin(
-        message.from_user.id
-    ):
-        return
-
-    bot.send_message(
-
-        message.chat.id,
-
-        "🛠 <b>پنل مدیریت</b>\n\n"
-        "یک گزینه را انتخاب کن:",
-
-        reply_markup=admin_menu()
-    )
-
-
-# =========================
-# داشبورد مدیریت
-# =========================
-
-@bot.message_handler(
-    func=lambda m: m.text == "📊 داشبورد"
-)
-def admin_dashboard(message):
-
-    if not is_admin(
-        message.from_user.id
-    ):
-        return
-
-    bot.send_message(
-
-        message.chat.id,
-
-        "📊 <b>داشبورد</b>\n\n"
-
-        f"👥 کاربران: {len(users)}\n"
-
-        f"💬 چت‌های فعال: "
-        f"{len(active_chats) // 2}\n"
-
-        f"🚨 گزارش‌ها: "
-        f"{len(reports)}\n"
-
-        f"💬 نظرات: "
-        f"{len(reviews)}\n"
-
-        f"💡 پیشنهادات: "
-        f"{len(suggestions)}\n"
-
-        f"🎁 قرعه‌کشی‌ها: "
-        f"{len(giveaways)}\n"
-
-        f"🏆 چالش‌ها: "
-        f"{len(challenges)}"
-    )
-
-
-# =========================
-# کاربران
-# =========================
-
-@bot.message_handler(
-    func=lambda m: m.text == "👥 کاربران"
-)
-def admin_users(message):
-
-    if not is_admin(
-        message.from_user.id
-    ):
-        return
-
-    if not users:
-
-        bot.send_message(
-            message.chat.id,
-            "کاربری وجود ندارد."
-        )
-
-        return
-
-    text = "👥 <b>کاربران</b>\n\n"
-
-    for user in list(users.values())[:50]:
-
-        text += (
-
-            f"🔢 {user['code']}\n"
-
-            f"ID: <code>{user['id']}</code>\n"
-
-            f"نام: {display_name(user['id'])}\n"
-
-            f"رنک: {rank_title(user['id'])}\n\n"
-        )
-
-    bot.send_message(
-        message.chat.id,
-        text
-    )
-
-
-# =========================
-# جستجوی کاربر
-# =========================
-
-@bot.message_handler(
-    func=lambda m: m.text == "🔎 جستجوی کاربر"
-)
-def search_user_start(message):
-
-    if not is_admin(
-        message.from_user.id
-    ):
-        return
-
-    states[
-        message.from_user.id
-    ] = {
-        "type": "admin_search"
-    }
-
-    bot.send_message(
-
-        message.chat.id,
-
-        "🔎 کد حساب یا Telegram ID کاربر را بفرست:"
-    )
-
-
-def find_user(value):
-
-    try:
-
-        user_id = int(value)
-
-        if user_id in users:
-
-            return users[user_id]
-
-    except:
-
-        pass
-
-    for user in users.values():
-
-        if user["code"] == value:
-
-            return user
+    for r in u.get("ranks", []):
+        if r["rank"] == "moderator":
+            if r.get("expires") is None:
+                return True
+            if now() < r["expires"]:
+                return True
+
+    return False
+
+
+def generate_code():
+    used = {u["code"] for u in users.values()}
+
+    for i in range(1, ACCOUNT_CODE_MAX + 1):
+        code = f"{i:04d}"
+        if code not in used:
+            return code
 
     return None
 
 
-# =========================
-# مدیریت سکه
-# =========================
+def get_user(uid):
+    return users.get(uid)
 
-@bot.message_handler(
-    func=lambda m: m.text == "🪙 مدیریت سکه"
-)
-def admin_coins(message):
 
-    if not is_admin(
-        message.from_user.id
-    ):
+def create_user(message, referral=None):
+    uid = message.from_user.id
+
+    if uid in users:
+        return users[uid]
+
+    code = generate_code()
+
+    if not code:
+        return None
+
+    username = message.from_user.username or ""
+    first_name = message.from_user.first_name or "کاربر"
+
+    users[uid] = {
+        "id": uid,
+        "username": username,
+        "name": first_name,
+        "code": code,
+        "coins": WELCOME_COINS,
+        "balance": 0,
+        "xp": 0,
+        "level": 1,
+        "ranks": [],
+        "phone": None,
+        "photo": None,
+        "anonymous": True,
+        "banned": False,
+        "warnings": 0,
+        "messages": 0,
+        "chats": 0,
+        "wins": 0,
+        "referrals": 0,
+        "joined": now(),
+        "last_activity": now(),
+        "game_wins": 0,
+        "game_plays": 0,
+        "daily_last": None,
+        "daily_streak": 0,
+        "mission_progress": {},
+    }
+
+    admin_log(
+        "ثبت کاربر",
+        uid,
+        f"کد حساب: {code}"
+    )
+
+    if referral:
+        inviter = find_by_code(referral)
+        if inviter and inviter != uid:
+            users[inviter]["referrals"] += 1
+            users[inviter]["coins"] += 50
+            add_xp(inviter, 25)
+
+            notify(
+                inviter,
+                "🎁 <b>جایزه دعوت</b>\n\n"
+                "یک کاربر با لینک دعوت شما وارد شد.\n"
+                "🪙 +50 سکه\n"
+                "⭐ +25 XP"
+            )
+
+    return users[uid]
+
+
+def ensure_user(message):
+    uid = message.from_user.id
+
+    if uid not in users:
+        return create_user(message)
+
+    users[uid]["username"] = message.from_user.username or users[uid]["username"]
+    users[uid]["name"] = message.from_user.first_name or users[uid]["name"]
+
+    touch(uid)
+    users[uid]["last_activity"] = now()
+
+    return users[uid]
+
+
+def find_by_code(code):
+    code = str(code).strip()
+
+    for uid, u in users.items():
+        if u["code"] == code:
+            return uid
+
+    return None
+
+
+def find_user(value):
+    value = str(value).strip()
+
+    if value.isdigit():
+        uid = int(value)
+
+        if uid in users:
+            return uid
+
+        uid2 = find_by_code(value)
+        if uid2:
+            return uid2
+
+    value = value.lstrip("@").lower()
+
+    for uid, u in users.items():
+        if u["username"].lower() == value:
+            return uid
+
+    for uid, u in users.items():
+        if u["name"].lower() == value:
+            return uid
+
+    return None
+
+
+def display_name(uid):
+    u = users.get(uid)
+
+    if not u:
+        return "کاربر"
+
+    return u["name"]
+
+
+def visible_rank(uid):
+    u = users.get(uid)
+
+    if not u:
+        return None
+
+    active = []
+
+    for r in u["ranks"]:
+        if r["rank"] == "moderator":
+            continue
+
+        expires = r.get("expires")
+
+        if expires and now() < expires:
+            active.append(r)
+
+    if not active:
+        return "ممبر"
+
+    active.sort(
+        key=lambda x: RANKS[x["rank"]]["priority"],
+        reverse=True
+    )
+
+    return RANKS[active[0]["rank"]]["name"]
+
+
+def all_ranks_text(uid):
+    u = users.get(uid)
+
+    if not u:
+        return "ممبر"
+
+    result = []
+
+    for r in u["ranks"]:
+        rank_name = RANKS[r["rank"]]["name"]
+
+        if r.get("expires"):
+            remain = r["expires"] - now()
+            days = max(0, remain.days)
+            result.append(f"{rank_name} — {days} روز")
+        else:
+            result.append(rank_name)
+
+    if is_moderator(uid):
+        result.append("🛡 ناظر")
+
+    return "\n".join(result) if result else "ممبر"
+
+
+def notify(uid, text):
+    try:
+        bot.send_message(uid, text)
+    except Exception:
+        pass
+
+
+def admin_log(action, target=None, details=""):
+    admin_logs.append({
+        "admin": ADMIN_ID,
+        "target": target,
+        "action": action,
+        "details": details,
+        "time": now()
+    })
+
+
+def transaction(uid, kind, amount, reason=""):
+    transactions.append({
+        "uid": uid,
+        "kind": kind,
+        "amount": amount,
+        "reason": reason,
+        "time": now()
+    })
+
+
+# ============================================================
+# XP و Level
+# ============================================================
+
+def xp_needed(level):
+    return level * 100
+
+
+def add_xp(uid, amount):
+    if uid not in users:
         return
 
-    states[
-        message.from_user.id
-    ] = {
+    if amount < 0:
+        return
+
+    u = users[uid]
+    u["xp"] += amount
+
+    while u["xp"] >= xp_needed(u["level"]):
+        u["xp"] -= xp_needed(u["level"])
+        u["level"] += 1
+
+        notify(
+            uid,
+            f"🎉 <b>لول آپ شد!</b>\n\n"
+            f"سطح جدید: {u['level']}"
+        )
+
+
+# ============================================================
+# منو
+# ============================================================
+
+def main_menu(uid):
+    kb = types.ReplyKeyboardMarkup(
+        resize_keyboard=True,
+        row_width=2
+    )
+
+    kb.add(
+        types.KeyboardButton("💬 چت"),
+        types.KeyboardButton("👤 پروفایل")
+    )
+
+    kb.add(
+        types.KeyboardButton("🪙 سکه"),
+        types.KeyboardButton("⭐ رنک‌ها")
+    )
+
+    kb.add(
+        types.KeyboardButton("🎮 بازی"),
+        types.KeyboardButton("🎯 مأموریت‌ها")
+    )
+
+    kb.add(
+        types.KeyboardButton("🎁 جوایز"),
+        types.KeyboardButton("🏆 چالش‌ها")
+    )
+
+    kb.add(
+        types.KeyboardButton("👥 دعوت دوستان"),
+        types.KeyboardButton("⚙️ تنظیمات")
+    )
+
+    kb.add(
+        types.KeyboardButton("❓ راهنما"),
+        types.KeyboardButton("📝 نظر و پیشنهاد")
+    )
+
+    if is_admin(uid):
+        kb.add(types.KeyboardButton("🛠 پنل مدیریت"))
+
+    elif is_moderator(uid):
+        kb.add(types.KeyboardButton("🛡 پنل ناظر"))
+
+    return kb
+
+
+def admin_menu():
+    kb = types.InlineKeyboardMarkup(row_width=2)
+
+    buttons = [
+        ("📊 داشبورد", "admin_dashboard"),
+        ("👥 کاربران", "admin_users"),
+        ("🔎 جستجوی کاربر", "admin_search"),
+        ("🚨 گزارش‌ها", "admin_reports"),
+        ("🛡 ناظران", "admin_mods"),
+        ("⚠️ هشدارها", "admin_warnings"),
+        ("🪙 مدیریت سکه", "admin_coins"),
+        ("💰 مدیریت اعتبار", "admin_balance"),
+        ("⭐ مدیریت XP", "admin_xp"),
+        ("🏆 مدیریت رنک", "admin_rank"),
+        ("🎁 قرعه‌کشی", "admin_giveaway"),
+        ("🎯 چالش‌ها", "admin_challenge"),
+        ("📢 پیام همگانی", "admin_broadcast"),
+        ("📣 اعلان", "admin_announce"),
+        ("💬 نظرات", "admin_reviews"),
+        ("💡 پیشنهادات", "admin_suggestions"),
+        ("📈 آمار", "admin_stats"),
+        ("📋 لاگ مدیریت", "admin_logs"),
+        ("💬 چت‌های فعال", "admin_chats"),
+        ("🔍 پیام‌ها", "admin_messages"),
+        ("🚫 مسدود کردن", "admin_ban"),
+        ("🔓 رفع مسدودی", "admin_unban"),
+        ("⏱ بن موقت", "admin_tempban"),
+        ("🎟 جوایز", "admin_rewards"),
+        ("🎮 بازی‌ها", "admin_games"),
+        ("🎯 مأموریت‌ها", "admin_missions"),
+        ("🏅 تنظیم رنک", "admin_rank_settings"),
+        ("🧹 پاکسازی", "admin_cleanup"),
+        ("⚙️ تنظیمات بات", "admin_settings"),
+        ("🔐 امنیت", "admin_security"),
+        ("📤 خروجی آمار", "admin_export"),
+    ]
+
+    for title, data in buttons:
+        kb.add(types.InlineKeyboardButton(title, callback_data=data))
+
+    return kb
+
+
+def moderator_menu():
+    kb = types.InlineKeyboardMarkup(row_width=2)
+
+    kb.add(
+        types.InlineKeyboardButton(
+            "💬 چت‌های فعال",
+            callback_data="mod_chats"
+        ),
+        types.InlineKeyboardButton(
+            "🚫 مسدود موقت",
+            callback_data="mod_ban"
+        )
+    )
+
+    kb.add(
+        types.InlineKeyboardButton(
+            "⚠️ هشدار",
+            callback_data="mod_warn"
+        ),
+        types.InlineKeyboardButton(
+            "🚨 گزارش‌ها",
+            callback_data="mod_reports"
+        )
+    )
+
+    return kb
+
+
+# ============================================================
+# /start
+# ============================================================
+
+@bot.message_handler(commands=["start"])
+def start(message):
+    uid = message.from_user.id
+
+    args = message.text.split(maxsplit=1)
+
+    referral = None
+
+    if len(args) > 1:
+        ref = args[1]
+
+        if ref.startswith("ref_"):
+            referral = ref[4:]
+
+    new_user = uid not in users
+
+    u = ensure_user(message)
+
+    if new_user:
+        bot.send_message(
+            uid,
+            "👋 <b>به چت ناشناس خوش اومدی!</b>\n\n"
+            "اینجا می‌تونی با آدم‌های جدید آشنا بشی.\n\n"
+            f"🆔 کد حساب شما: <code>{u['code']}</code>\n"
+            f"🪙 سکه هدیه: {WELCOME_COINS}\n\n"
+            "برای شروع از منوی پایین استفاده کن.",
+            reply_markup=main_menu(uid)
+        )
+    else:
+        bot.send_message(
+            uid,
+            "👋 دوباره خوش اومدی!",
+            reply_markup=main_menu(uid)
+        )
+
+
+# ============================================================
+# پروفایل
+# ============================================================
+
+def send_profile(uid):
+    u = users[uid]
+
+    rank = visible_rank(uid)
+
+    text = (
+        "👤 <b>پروفایل شما</b>\n\n"
+        f"👤 نام: {u['name']}\n"
+        f"🆔 کد: <code>{u['code']}</code>\n"
+        f"⭐ سطح: {u['level']}\n"
+        f"✨ XP: {u['xp']}/{xp_needed(u['level'])}\n"
+        f"🪙 سکه: {u['coins']}\n"
+        f"💰 اعتبار مجازی: {u['balance']:,} تومان\n"
+        f"🏅 رنک نمایشی: {rank}\n\n"
+        "<b>رنک‌های فعال:</b>\n"
+        f"{all_ranks_text(uid)}"
+    )
+
+    kb = types.InlineKeyboardMarkup()
+
+    kb.add(
+        types.InlineKeyboardButton(
+            "🖼 تغییر عکس",
+            callback_data="profile_photo"
+        ),
+        types.InlineKeyboardButton(
+            "🕵️ حالت ناشناس",
+            callback_data="profile_anon"
+        )
+    )
+
+    kb.add(
+        types.InlineKeyboardButton(
+            "👁 حالت عادی",
+            callback_data="profile_normal"
+        )
+    )
+
+    bot.send_message(
+        uid,
+        text,
+        reply_markup=kb
+    )
+
+
+# ============================================================
+# سکه
+# ============================================================
+
+def coins_page(uid):
+    u = users[uid]
+
+    kb = types.InlineKeyboardMarkup()
+
+    kb.add(
+        types.InlineKeyboardButton(
+            "🎁 جایزه روزانه",
+            callback_data="daily"
+        )
+    )
+
+    kb.add(
+        types.InlineKeyboardButton(
+            "🛒 فروشگاه رنک",
+            callback_data="rank_shop"
+        )
+    )
+
+    kb.add(
+        types.InlineKeyboardButton(
+            "👥 دعوت دوستان",
+            callback_data="referral"
+        )
+    )
+
+    bot.send_message(
+        uid,
+        "🪙 <b>کیف پول سکه</b>\n\n"
+        f"موجودی: <b>{u['coins']}</b> سکه\n"
+        f"💰 اعتبار مجازی: {u['balance']:,} تومان\n\n"
+        "⚠️ اعتبار داخل بات مجازی است و امکان برداشت وجه واقعی ندارد.",
+        reply_markup=kb
+    )
+
+
+# ============================================================
+# چت
+# ============================================================
+
+def start_chat(uid):
+    if is_banned(uid):
+        bot.send_message(
+            uid,
+            "🚫 حساب شما مسدود است."
+        )
+        return
+
+    if uid in chats:
+        bot.send_message(
+            uid,
+            "❌ شما همین الان داخل یک چت هستید.\n"
+            "برای پایان: /end"
+        )
+        return
+
+    if uid in waiting_users:
+        bot.send_message(
+            uid,
+            "⏳ در صف پیدا کردن مخاطب هستی..."
+        )
+        return
+
+    # پیدا کردن نفر مناسب
+    partner = None
+
+    for x in waiting_users:
+        if x != uid and not is_banned(x):
+            partner = x
+            break
+
+    if partner:
+        waiting_users.remove(partner)
+
+        chat_id = f"{min(uid, partner)}_{max(uid, partner)}"
+
+        chats[uid] = {
+            "partner": partner,
+            "chat_id": chat_id,
+            "started": now()
+        }
+
+        chats[partner] = {
+            "partner": uid,
+            "chat_id": chat_id,
+            "started": now()
+        }
+
+        users[uid]["chats"] += 1
+        users[partner]["chats"] += 1
+
+        add_xp(uid, 10)
+        add_xp(partner, 10)
+
+        send_chat_started(uid, partner)
+        send_chat_started(partner, uid)
+
+    else:
+        waiting_users.append(uid)
+
+        bot.send_message(
+            uid,
+            "🔎 <b>در حال پیدا کردن مخاطب...</b>\n\n"
+            "به محض پیدا شدن یک نفر، چت شروع می‌شود.\n\n"
+            "برای لغو صف: /cancel"
+        )
+
+
+def send_chat_started(uid, partner):
+    u = users[uid]
+
+    if u["anonymous"]:
+        text = (
+            "💬 <b>مخاطب پیدا شد!</b>\n\n"
+            "🕵️ حالت ناشناس فعال است.\n"
+            "هویت شما نمایش داده نمی‌شود.\n\n"
+            "برای پایان: /end\n"
+            "برای گزارش: /report\n"
+            "برای مسدود کردن: /block"
+        )
+    else:
+        p = users[partner]
+
+        rank = visible_rank(partner)
+
+        text = (
+            "💬 <b>مخاطب پیدا شد!</b>\n\n"
+            f"👤 {p['name']}\n"
+            f"🏅 {rank}\n\n"
+            "برای پایان: /end\n"
+            "برای گزارش: /report\n"
+            "برای مسدود کردن: /block"
+        )
+
+    bot.send_message(uid, text)
+
+
+def end_chat(uid):
+    if uid not in chats:
+        bot.send_message(
+            uid,
+            "❌ شما داخل چتی نیستید."
+        )
+        return
+
+    partner = chats[uid]["partner"]
+
+    chat_id = chats[uid]["chat_id"]
+
+    chats.pop(uid, None)
+    chats.pop(partner, None)
+
+    bot.send_message(
+        uid,
+        "🔴 چت پایان یافت.",
+        reply_markup=main_menu(uid)
+    )
+
+    if partner in users:
+        bot.send_message(
+            partner,
+            "🔴 مخاطب چت را پایان داد.",
+            reply_markup=main_menu(partner)
+        )
+
+        ask_rating(partner, uid, chat_id)
+
+    ask_rating(uid, partner, chat_id)
+
+
+def ask_rating(uid, target, chat_id):
+    if uid not in users:
+        return
+
+    kb = types.InlineKeyboardMarkup(row_width=5)
+
+    for i in range(1, 6):
+        kb.add(
+            types.InlineKeyboardButton(
+                str(i),
+                callback_data=f"rate:{target}:{chat_id}:{i}"
+            )
+        )
+
+    bot.send_message(
+        uid,
+        "⭐ <b>به این چت امتیاز بده:</b>\n"
+        "۱ تا ۵",
+        reply_markup=kb
+    )
+
+
+# ============================================================
+# گزارش
+# ============================================================
+
+def start_report(uid):
+    if uid not in chats:
+        bot.send_message(
+            uid,
+            "❌ برای گزارش باید داخل چت باشید."
+        )
+        return
+
+    pending[uid] = {
+        "type": "report_message",
+        "target": chats[uid]["partner"]
+    }
+
+    bot.send_message(
+        uid,
+        "🚨 <b>گزارش کاربر</b>\n\n"
+        "اول پیام مشکل‌دار را همینجا بفرست یا فوروارد کن.\n\n"
+        "می‌تواند متن، عکس، ویدیو یا فایل باشد."
+    )
+
+
+def finish_report_message(message):
+    uid = message.from_user.id
+
+    data = pending.get(uid)
+
+    if not data:
+        return
+
+    target = data["target"]
+
+    report = {
+        "id": len(reports) + 1,
+        "reporter": uid,
+        "target": target,
+        "message_id": message.message_id,
+        "chat_id": message.chat.id,
+        "text": message.text or message.caption or "",
+        "content_type": message.content_type,
+        "reason": None,
+        "time": now(),
+        "status": "new"
+    }
+
+    reports.append(report)
+
+    pending[uid] = {
+        "type": "report_reason",
+        "report_id": report["id"]
+    }
+
+    kb = types.InlineKeyboardMarkup(row_width=2)
+
+    reasons = [
+        ("فحاشی", "profanity"),
+        ("تهدید", "threat"),
+        ("اسپم", "spam"),
+        ("محتوای نامناسب", "inappropriate"),
+        ("محتوای غیرقانونی", "illegal"),
+        ("سایر", "other")
+    ]
+
+    for title, key in reasons:
+        kb.add(
+            types.InlineKeyboardButton(
+                title,
+                callback_data=f"report_reason:{key}"
+            )
+        )
+
+    bot.send_message(
+        uid,
+        "دلیل گزارش را انتخاب کن:",
+        reply_markup=kb
+    )
+
+
+# ============================================================
+# بلاک
+# ============================================================
+
+def block_user(uid):
+    if uid not in chats:
+        bot.send_message(
+            uid,
+            "❌ داخل چت نیستی."
+        )
+        return
+
+    target = chats[uid]["partner"]
+
+    blocks.setdefault(uid, set())
+    blocks[uid].add(target)
+
+    admin_log(
+        "بلاک کاربر",
+        target,
+        f"توسط {uid}"
+    )
+
+    bot.send_message(
+        uid,
+        "🚫 کاربر مسدود شد."
+    )
+
+    end_chat(uid)
+
+
+# ============================================================
+# رنک
+# ============================================================
+
+def rank_shop(uid):
+    kb = types.InlineKeyboardMarkup(row_width=1)
+
+    for key, r in RANKS.items():
+
+        if key in ("member", "moderator"):
+            continue
+
+        kb.add(
+            types.InlineKeyboardButton(
+                f"{r['name']} | {r['price']} سکه | {r['days']} روز",
+                callback_data=f"buy_rank:{key}"
+            )
+        )
+
+    bot.send_message(
+        uid,
+        "🏆 <b>فروشگاه رنک</b>\n\n"
+        "رنک‌ها با سکه خریداری می‌شوند.\n"
+        "رنک‌ها ۳۰ روز فعال هستند.\n"
+        "اگر چند رنک داشته باشید، همه حفظ می‌شوند.",
+        reply_markup=kb
+    )
+
+
+def buy_rank(uid, rank):
+    if rank not in RANKS:
+        return
+
+    r = RANKS[rank]
+
+    if users[uid]["coins"] < r["price"]:
+        bot.send_message(
+            uid,
+            "❌ سکه کافی نداری."
+        )
+        return
+
+    users[uid]["coins"] -= r["price"]
+
+    expires = now() + timedelta(days=r["days"])
+
+    users[uid]["ranks"].append({
+        "rank": rank,
+        "expires": expires
+    })
+
+    transaction(
+        uid,
+        "خرید رنک",
+        -r["price"],
+        rank
+    )
+
+    bot.send_message(
+        uid,
+        f"🎉 <b>{r['name']}</b> خریداری شد!\n\n"
+        f"⏳ مدت: {r['days']} روز\n"
+        f"🪙 هزینه: {r['price']} سکه"
+    )
+
+
+# ============================================================
+# روزانه
+# ============================================================
+
+def daily(uid):
+    u = users[uid]
+
+    today = now().date()
+
+    if u["daily_last"] == today:
+        bot.send_message(
+            uid,
+            "⏳ جایزه امروز را قبلاً گرفتی."
+        )
+        return
+
+    if u["daily_last"] == today - timedelta(days=1):
+        u["daily_streak"] += 1
+    else:
+        u["daily_streak"] = 1
+
+    reward = 50 + (u["daily_streak"] * 10)
+
+    u["coins"] += reward
+    u["daily_last"] = today
+
+    add_xp(uid, 20)
+
+    bot.send_message(
+        uid,
+        "🎁 <b>جایزه روزانه</b>\n\n"
+        f"🪙 +{reward} سکه\n"
+        f"🔥 استریک: {u['daily_streak']}"
+    )
+
+
+# ============================================================
+# دعوت
+# ============================================================
+
+def referral_page(uid):
+    code = users[uid]["code"]
+
+    bot.send_message(
+        uid,
+        "👥 <b>دعوت دوستان</b>\n\n"
+        "لینک اختصاصی شما:\n"
+        f"<code>https://t.me/{BOT_USERNAME}?start=ref_{code}</code>\n\n"
+        "با هر عضو جدید:\n"
+        "🪙 +50 سکه\n"
+        "⭐ +25 XP"
+    )
+
+
+# ============================================================
+# بازی
+# ============================================================
+
+def game_menu(uid):
+    kb = types.InlineKeyboardMarkup(row_width=2)
+
+    kb.add(
+        types.InlineKeyboardButton(
+            "🎲 حدس عدد",
+            callback_data="game_guess"
+        ),
+        types.InlineKeyboardButton(
+            "🪙 شیر یا خط",
+            callback_data="game_coin"
+        )
+    )
+
+    bot.send_message(
+        uid,
+        "🎮 <b>بازی‌ها</b>\n\n"
+        "بازی کن و XP و سکه بگیر.",
+        reply_markup=kb
+    )
+
+
+def coin_game(uid):
+    u = users[uid]
+
+    result = random.choice(["شیر", "خط"])
+
+    u["game_plays"] += 1
+
+    reward = random.randint(5, 20)
+
+    u["coins"] += reward
+    add_xp(uid, 5)
+
+    bot.send_message(
+        uid,
+        "🪙 <b>شیر یا خط</b>\n\n"
+        f"نتیجه: <b>{result}</b>\n"
+        f"🪙 جایزه: +{reward}"
+    )
+
+
+def guess_game(uid):
+    number = random.randint(1, 5)
+
+    pending[uid] = {
+        "type": "guess",
+        "number": number
+    }
+
+    bot.send_message(
+        uid,
+        "🎲 یک عدد بین ۱ تا ۵ حدس بزن."
+    )
+
+
+# ============================================================
+# مأموریت‌ها
+# ============================================================
+
+def mission_page(uid):
+    u = users[uid]
+
+    text = (
+        "🎯 <b>مأموریت‌ها</b>\n\n"
+        "💬 انجام ۳ چت\n"
+        f"پیشرفت: {min(u['chats'], 3)}/3\n\n"
+        "💬 ارسال ۲۰ پیام\n"
+        f"پیشرفت: {min(u['messages'], 20)}/20\n\n"
+        "👥 دعوت ۲ نفر\n"
+        f"پیشرفت: {min(u['referrals'], 2)}/2"
+    )
+
+    bot.send_message(uid, text)
+
+
+# ============================================================
+# تنظیمات
+# ============================================================
+
+def settings_page(uid):
+    u = users[uid]
+
+    kb = types.InlineKeyboardMarkup(row_width=2)
+
+    kb.add(
+        types.InlineKeyboardButton(
+            "🕵️ ناشناس",
+            callback_data="profile_anon"
+        ),
+        types.InlineKeyboardButton(
+            "👁 عادی",
+            callback_data="profile_normal"
+        )
+    )
+
+    kb.add(
+        types.InlineKeyboardButton(
+            "🖼 عکس پروفایل",
+            callback_data="profile_photo"
+        )
+    )
+
+    bot.send_message(
+        uid,
+        "⚙️ <b>تنظیمات</b>\n\n"
+        f"حالت فعلی: {'ناشناس' if u['anonymous'] else 'عادی'}",
+        reply_markup=kb
+    )
+
+
+# ============================================================
+# نظر و پیشنهاد
+# ============================================================
+
+def review_page(uid):
+    kb = types.InlineKeyboardMarkup()
+
+    kb.add(
+        types.InlineKeyboardButton(
+            "⭐ ثبت نظر",
+            callback_data="new_review"
+        )
+    )
+
+    kb.add(
+        types.InlineKeyboardButton(
+            "💡 پیشنهاد",
+            callback_data="new_suggestion"
+        )
+    )
+
+    bot.send_message(
+        uid,
+        "📝 <b>نظر و پیشنهاد</b>\n\n"
+        "نظر شما به مدیریت ارسال می‌شود.",
+        reply_markup=kb
+    )
+
+
+# ============================================================
+# پنل مدیریت
+# ============================================================
+
+def admin_panel(uid):
+    if not is_admin(uid):
+        return
+
+    bot.send_message(
+        uid,
+        "🛠 <b>پنل مدیریت</b>\n\n"
+        "یک گزینه را انتخاب کن:",
+        reply_markup=admin_menu()
+    )
+
+
+def admin_dashboard(uid):
+    text = (
+        "📊 <b>داشبورد</b>\n\n"
+        f"👥 کاربران: {len(users)}\n"
+        f"💬 چت‌های فعال: {len(chats)//2}\n"
+        f"⏳ صف چت: {len(waiting_users)}\n"
+        f"🚨 گزارش‌ها: {len(reports)}\n"
+        f"⚠️ هشدارها: {len(warnings)}\n"
+        f"📝 نظرات: {len(reviews)}\n"
+        f"💡 پیشنهادات: {len(suggestions)}\n"
+        f"📋 لاگ‌ها: {len(admin_logs)}"
+    )
+
+    bot.send_message(uid, text)
+
+
+def admin_users(uid):
+    if not users:
+        bot.send_message(uid, "کاربری وجود ندارد.")
+        return
+
+    text = "👥 <b>کاربران</b>\n\n"
+
+    for i, (user_id, u) in enumerate(users.items()):
+        if i >= 30:
+            break
+
+        text += (
+            f"• {u['name']} | "
+            f"<code>{u['code']}</code> | "
+            f"{u['coins']} سکه\n"
+        )
+
+    bot.send_message(uid, text)
+
+
+def admin_search_start(uid):
+    pending[uid] = {
+        "type": "admin_search"
+    }
+
+    bot.send_message(
+        uid,
+        "🔎 کد حساب، آیدی عددی، یوزرنیم یا نام کاربر را بفرست."
+    )
+
+
+def show_admin_user(admin, target):
+    u = users[target]
+
+    text = (
+        "👤 <b>اطلاعات کاربر</b>\n\n"
+        f"نام: {u['name']}\n"
+        f"Username: @{u['username'] or '-'}\n"
+        f"Telegram ID: <code>{u['id']}</code>\n"
+        f"کد حساب: <code>{u['code']}</code>\n"
+        f"تلفن: {u['phone'] or 'ثبت نشده'}\n"
+        f"سکه: {u['coins']}\n"
+        f"اعتبار: {u['balance']:,}\n"
+        f"XP: {u['xp']}\n"
+        f"Level: {u['level']}\n"
+        f"رنک‌ها:\n{all_ranks_text(target)}\n\n"
+        f"چت‌ها: {u['chats']}\n"
+        f"پیام‌ها: {u['messages']}\n"
+        f"دعوت‌ها: {u['referrals']}\n"
+        f"هشدار: {u['warnings']}\n"
+        f"مسدود: {'بله' if u['banned'] else 'خیر'}"
+    )
+
+    kb = types.InlineKeyboardMarkup(row_width=2)
+
+    kb.add(
+        types.InlineKeyboardButton(
+            "🪙 +سکه",
+            callback_data=f"target_coin_add:{target}"
+        ),
+        types.InlineKeyboardButton(
+            "🪙 -سکه",
+            callback_data=f"target_coin_sub:{target}"
+        )
+    )
+
+    kb.add(
+        types.InlineKeyboardButton(
+            "💰 +اعتبار",
+            callback_data=f"target_balance_add:{target}"
+        ),
+        types.InlineKeyboardButton(
+            "💰 -اعتبار",
+            callback_data=f"target_balance_sub:{target}"
+        )
+    )
+
+    kb.add(
+        types.InlineKeyboardButton(
+            "⭐ +XP",
+            callback_data=f"target_xp_add:{target}"
+        ),
+        types.InlineKeyboardButton(
+            "🏆 رنک",
+            callback_data=f"target_rank:{target}"
+        )
+    )
+
+    kb.add(
+        types.InlineKeyboardButton(
+            "🚫 بن",
+            callback_data=f"target_ban:{target}"
+        ),
+        types.InlineKeyboardButton(
+            "🔓 رفع بن",
+            callback_data=f"target_unban:{target}"
+        )
+    )
+
+    bot.send_message(
+        admin,
+        text,
+        reply_markup=kb
+    )
+
+
+# ============================================================
+# مدیریت گزارش‌ها
+# ============================================================
+
+def admin_reports(uid):
+    if not reports:
+        bot.send_message(uid, "🚨 گزارشی وجود ندارد.")
+        return
+
+    for r in reports[-20:]:
+        text = (
+            f"🚨 <b>گزارش #{r['id']}</b>\n\n"
+            f"گزارش‌دهنده: <code>{r['reporter']}</code>\n"
+            f"متهم: <code>{r['target']}</code>\n"
+            f"دلیل: {r['reason'] or 'انتخاب نشده'}\n"
+            f"نوع پیام: {r['content_type']}\n"
+            f"وضعیت: {r['status']}\n"
+            f"زمان: {r['time']}"
+        )
+
+        bot.send_message(uid, text)
+
+
+# ============================================================
+# مدیریت ناظران
+# ============================================================
+
+def admin_mods(uid):
+    text = "🛡 <b>ناظران</b>\n\n"
+
+    found = False
+
+    for user_id, u in users.items():
+        if is_moderator(user_id) and not is_admin(user_id):
+            found = True
+
+            text += (
+                f"👤 {u['name']}\n"
+                f"🆔 <code>{u['id']}</code>\n"
+                f"کد: {u['code']}\n\n"
+            )
+
+    if not found:
+        text += "ناظری وجود ندارد."
+
+    bot.send_message(uid, text)
+
+
+# ============================================================
+# مدیریت هشدار
+# ============================================================
+
+def admin_warnings(uid):
+    if not warnings:
+        bot.send_message(uid, "⚠️ هشداری ثبت نشده.")
+        return
+
+    text = "⚠️ <b>هشدارها</b>\n\n"
+
+    for w in warnings[-30:]:
+        text += (
+            f"کاربر: {w['target']}\n"
+            f"دلیل: {w['reason']}\n"
+            f"مدیر: {w['admin']}\n"
+            f"زمان: {w['time']}\n\n"
+        )
+
+    bot.send_message(uid, text)
+
+
+# ============================================================
+# مدیریت سکه
+# ============================================================
+
+def admin_coins_start(uid):
+    pending[uid] = {
         "type": "admin_coins"
     }
 
     bot.send_message(
-
-        message.chat.id,
-
-        "فرمت:\n\n"
-        "<code>ID مقدار</code>\n\n"
+        uid,
+        "🪙 به این شکل بفرست:\n\n"
+        "<code>کدکاربر مقدار</code>\n\n"
         "مثال:\n"
-        "<code>123456789 500</code>"
+        "<code>0001 500</code>\n"
+        "برای کم کردن:\n"
+        "<code>0001 -500</code>"
     )
 
 
-# =========================
-# مدیریت اعتبار
-# =========================
-
-@bot.message_handler(
-    func=lambda m: m.text == "💰 مدیریت اعتبار"
-)
-def admin_balance(message):
-
-    if not is_admin(
-        message.from_user.id
-    ):
-        return
-
-    states[
-        message.from_user.id
-    ] = {
+def admin_balance_start(uid):
+    pending[uid] = {
         "type": "admin_balance"
     }
 
     bot.send_message(
-
-        message.chat.id,
-
-        "فرمت:\n\n"
-        "<code>ID مقدار</code>\n\n"
+        uid,
+        "💰 کد کاربر و مقدار اعتبار را بفرست.\n\n"
         "مثال:\n"
-        "<code>123456789 500000</code>"
+        "<code>0001 500000</code>"
     )
 
 
-# =========================
-# مدیریت XP
-# =========================
-
-@bot.message_handler(
-    func=lambda m: m.text == "⭐ مدیریت XP"
-)
-def admin_xp(message):
-
-    if not is_admin(
-        message.from_user.id
-    ):
-        return
-
-    states[
-        message.from_user.id
-    ] = {
+def admin_xp_start(uid):
+    pending[uid] = {
         "type": "admin_xp"
     }
 
     bot.send_message(
-
-        message.chat.id,
-
-        "فرمت:\n\n"
-        "<code>ID مقدار_XP</code>"
+        uid,
+        "⭐ کد کاربر و مقدار XP را بفرست.\n\n"
+        "<code>0001 100</code>"
     )
 
 
-# =========================
-# مدیریت رنک
-# =========================
+# ============================================================
+# بن مدیریت
+# ============================================================
 
-@bot.message_handler(
-    func=lambda m: m.text == "🏆 مدیریت رنک"
-)
-def admin_rank(message):
+def admin_ban_start(uid):
+    pending[uid] = {
+        "type": "admin_ban"
+    }
 
-    if not is_admin(
-        message.from_user.id
-    ):
-        return
+    bot.send_message(
+        uid,
+        "🚫 کد کاربر را بفرست."
+    )
 
-    states[
-        message.from_user.id
-    ] = {
+
+def admin_unban_start(uid):
+    pending[uid] = {
+        "type": "admin_unban"
+    }
+
+    bot.send_message(
+        uid,
+        "🔓 کد کاربر را بفرست."
+    )
+
+
+# ============================================================
+# مدیریت اعتبار / XP
+# ============================================================
+
+def apply_coin_change(target, amount):
+    old = users[target]["coins"]
+
+    users[target]["coins"] = max(
+        0,
+        users[target]["coins"] + amount
+    )
+
+    transaction(
+        target,
+        "coins",
+        amount,
+        "تغییر توسط مدیریت"
+    )
+
+    notify(
+        target,
+        "🪙 <b>تغییر موجودی سکه</b>\n\n"
+        f"مقدار تغییر: {amount:+}\n"
+        f"موجودی جدید: {users[target]['coins']}"
+    )
+
+    admin_log(
+        "تغییر سکه",
+        target,
+        f"{old} -> {users[target]['coins']}"
+    )
+
+
+def apply_balance_change(target, amount):
+    old = users[target]["balance"]
+
+    users[target]["balance"] = max(
+        0,
+        users[target]["balance"] + amount
+    )
+
+    transaction(
+        target,
+        "balance",
+        amount,
+        "تغییر توسط مدیریت"
+    )
+
+    notify(
+        target,
+        "💰 <b>اعتبار مجازی شما تغییر کرد</b>\n\n"
+        f"تغییر: {amount:+,} تومان\n"
+        f"موجودی جدید: {users[target]['balance']:,} تومان"
+    )
+
+    admin_log(
+        "تغییر اعتبار",
+        target,
+        f"{old} -> {users[target]['balance']}"
+    )
+
+
+# ============================================================
+# رنک مدیریت
+# ============================================================
+
+def admin_rank_start(uid):
+    pending[uid] = {
         "type": "admin_rank"
     }
 
     bot.send_message(
-
-        message.chat.id,
-
-        "فرمت:\n\n"
-        "<code>ID rank</code>\n\n"
-
-        "مثال:\n"
-        "<code>123456789 vip</code>\n\n"
-
+        uid,
+        "🏆 این فرمت را بفرست:\n\n"
+        "<code>0001 gold</code>\n\n"
         "رنک‌ها:\n"
-        "bronze\n"
         "silver\n"
         "gold\n"
         "diamond\n"
@@ -1450,767 +1537,2105 @@ def admin_rank(message):
     )
 
 
-# =========================
-# نظرات مدیریت
-# =========================
+def give_rank_admin(target, rank):
+    if rank not in RANKS:
+        return False
 
-@bot.message_handler(
-    func=lambda m: m.text == "💬 نظرات"
-)
-def admin_reviews(message):
+    if rank == "moderator":
+        expires = None
+    else:
+        expires = now() + timedelta(days=30)
 
-    if not is_admin(
-        message.from_user.id
-    ):
-        return
+    users[target]["ranks"].append({
+        "rank": rank,
+        "expires": expires
+    })
 
-    if not reviews:
+    notify(
+        target,
+        f"🏆 <b>رنک جدید دریافت کردی</b>\n\n"
+        f"{RANKS[rank]['name']}"
+    )
 
-        bot.send_message(
-            message.chat.id,
-            "💬 نظری ثبت نشده."
+    admin_log(
+        "اعطای رنک",
+        target,
+        rank
+    )
+
+    return True
+
+
+# ============================================================
+# قرعه‌کشی
+# ============================================================
+
+def giveaway_menu(uid):
+    kb = types.InlineKeyboardMarkup()
+
+    kb.add(
+        types.InlineKeyboardButton(
+            "🎁 قرعه‌کشی‌های فعال",
+            callback_data="giveaways_active"
         )
-
-        return
-
-    for review in reviews[-30:]:
-
-        bot.send_message(
-
-            message.chat.id,
-
-            f"👤 کاربر: "
-            f"{review['user']}\n\n"
-
-            f"💬 {review['text']}\n\n"
-
-            f"🕒 {review['time']}"
-        )
-
-
-# =========================
-# پیشنهادات مدیریت
-# =========================
-
-@bot.message_handler(
-    func=lambda m: m.text == "💡 پیشنهادات"
-)
-def admin_suggestions(message):
-
-    if not is_admin(
-        message.from_user.id
-    ):
-        return
-
-    if not suggestions:
-
-        bot.send_message(
-            message.chat.id,
-            "💡 پیشنهادی ثبت نشده."
-        )
-
-        return
-
-    for suggestion in suggestions[-30:]:
-
-        bot.send_message(
-
-            message.chat.id,
-
-            f"👤 کاربر: "
-            f"{suggestion['user']}\n\n"
-
-            f"💡 {suggestion['text']}\n\n"
-
-            f"🕒 {suggestion['time']}"
-        )
-
-
-# =========================
-# لاگ مدیریت
-# =========================
-
-@bot.message_handler(
-    func=lambda m: m.text == "📋 لاگ مدیریت"
-)
-def admin_logs(message):
-
-    if not is_admin(
-        message.from_user.id
-    ):
-        return
-
-    if not admin_actions:
-
-        bot.send_message(
-            message.chat.id,
-            "📋 هنوز لاگی ثبت نشده."
-        )
-
-        return
-
-    text = "📋 <b>آخرین اقدامات مدیریت</b>\n\n"
-
-    for log in admin_actions[-30:]:
-
-        text += (
-
-            f"🕒 {log['time']}\n"
-
-            f"کاربر: {log['target']}\n"
-
-            f"عملیات: {log['action']}\n"
-
-            f"قدیم: {log['old']}\n"
-
-            f"جدید: {log['new']}\n\n"
-        )
+    )
 
     bot.send_message(
-        message.chat.id,
-        text
+        uid,
+        "🎁 <b>قرعه‌کشی</b>",
+        reply_markup=kb
     )
 
 
-# =========================
-# چت‌های فعال
-# =========================
+def create_giveaway_start(uid):
+    pending[uid] = {
+        "type": "giveaway_title",
+        "data": {}
+    }
 
-@bot.message_handler(
-    func=lambda m: m.text == "💬 چت‌های فعال"
-)
-def active_chats_admin(message):
+    bot.send_message(
+        uid,
+        "🎁 عنوان قرعه‌کشی را بفرست."
+    )
 
-    if not is_admin(
-        message.from_user.id
-    ):
+
+def show_giveaways(uid):
+    active = [
+        x for x in giveaways.values()
+        if x["status"] == "active"
+    ]
+
+    if not active:
+        bot.send_message(
+            uid,
+            "فعلاً قرعه‌کشی فعالی وجود ندارد."
+        )
         return
 
-    if not active_chats:
+    for g in active:
+        kb = types.InlineKeyboardMarkup()
 
-        bot.send_message(
-            message.chat.id,
-            "💬 هیچ چت فعالی وجود ندارد."
+        kb.add(
+            types.InlineKeyboardButton(
+                "🎟 شرکت می‌کنم",
+                callback_data=f"join_giveaway:{g['id']}"
+            )
         )
 
+        bot.send_message(
+            uid,
+            f"🎁 <b>{g['title']}</b>\n\n"
+            f"{g['description']}\n\n"
+            f"🏆 جایزه: {g['prize']}\n"
+            f"👥 برنده‌ها: {g['winners']}\n"
+            f"⏳ پایان: {g['end']}",
+            reply_markup=kb
+        )
+
+
+# ============================================================
+# چالش‌ها
+# ============================================================
+
+def challenge_menu(uid):
+    active = [
+        x for x in challenges.values()
+        if x["status"] == "active"
+    ]
+
+    if not active:
+        bot.send_message(
+            uid,
+            "🏆 چالش فعالی وجود ندارد."
+        )
         return
 
-    pairs = set()
+    for c in active:
+        bot.send_message(
+            uid,
+            f"🏆 <b>{c['title']}</b>\n\n"
+            f"{c['description']}\n\n"
+            f"🎯 نوع: {c['type']}\n"
+            f"🎁 جایزه: {c['prize']} سکه\n"
+            f"⏳ پایان: {c['end']}"
+        )
+
+
+def create_challenge_start(uid):
+    pending[uid] = {
+        "type": "challenge_title",
+        "data": {}
+    }
+
+    bot.send_message(
+        uid,
+        "🏆 عنوان چالش را بفرست."
+    )
+
+
+# ============================================================
+# نظر ادمین
+# ============================================================
+
+def admin_reviews(uid):
+    if not reviews:
+        bot.send_message(uid, "💬 نظری ثبت نشده.")
+        return
+
+    for r in reviews[-30:]:
+        bot.send_message(
+            uid,
+            "💬 <b>نظر</b>\n\n"
+            f"کاربر: {r['uid']}\n"
+            f"{r['text']}\n"
+            f"زمان: {r['time']}"
+        )
+
+
+def admin_suggestions(uid):
+    if not suggestions:
+        bot.send_message(uid, "💡 پیشنهادی ثبت نشده.")
+        return
+
+    for s in suggestions[-30:]:
+        bot.send_message(
+            uid,
+            "💡 <b>پیشنهاد</b>\n\n"
+            f"کاربر: {s['uid']}\n"
+            f"{s['text']}\n"
+            f"زمان: {s['time']}"
+        )
+
+
+# ============================================================
+# پیام همگانی
+# ============================================================
+
+def broadcast_start(uid):
+    pending[uid] = {
+        "type": "broadcast"
+    }
+
+    bot.send_message(
+        uid,
+        "📢 متن پیام همگانی را بفرست."
+    )
+
+
+def broadcast(text):
+    count = 0
+
+    for uid in list(users.keys()):
+        try:
+            bot.send_message(uid, text)
+            count += 1
+        except Exception:
+            pass
+
+    return count
+
+
+# ============================================================
+# آمار
+# ============================================================
+
+def admin_stats(uid):
+    total_coins = sum(
+        u["coins"] for u in users.values()
+    )
+
+    total_balance = sum(
+        u["balance"] for u in users.values()
+    )
+
+    total_messages = sum(
+        u["messages"] for u in users.values()
+    )
+
+    bot.send_message(
+        uid,
+        "📈 <b>آمار کامل</b>\n\n"
+        f"👥 کاربران: {len(users)}\n"
+        f"💬 پیام‌ها: {total_messages}\n"
+        f"💬 چت فعال: {len(chats)//2}\n"
+        f"🪙 کل سکه کاربران: {total_coins}\n"
+        f"💰 کل اعتبار مجازی: {total_balance:,}\n"
+        f"🚨 گزارش‌ها: {len(reports)}\n"
+        f"🎁 قرعه‌کشی‌ها: {len(giveaways)}\n"
+        f"🏆 چالش‌ها: {len(challenges)}"
+    )
+
+
+# ============================================================
+# چت‌های فعال
+# ============================================================
+
+def admin_chats(uid):
+    if not chats:
+        bot.send_message(
+            uid,
+            "💬 چت فعالی وجود ندارد."
+        )
+        return
 
     text = "💬 <b>چت‌های فعال</b>\n\n"
 
-    for a, b in active_chats.items():
+    seen = set()
 
-        pair = tuple(
-            sorted([a, b])
-        )
+    for user_id, data in chats.items():
+        partner = data["partner"]
 
-        if pair in pairs:
+        key = tuple(sorted([user_id, partner]))
+
+        if key in seen:
             continue
 
-        pairs.add(pair)
+        seen.add(key)
 
         text += (
-            f"<code>{a}</code> ↔ "
-            f"<code>{b}</code>\n"
+            f"👤 {user_id} ↔ {partner}\n"
+            f"🆔 {data['chat_id']}\n\n"
         )
 
-    bot.send_message(
-        message.chat.id,
-        text
-    )
+    bot.send_message(uid, text)
 
 
-# =========================
-# گزارش
-# =========================
+# ============================================================
+# پیام‌ها
+# ============================================================
 
-@bot.message_handler(
-    commands=["report"]
-)
-def report(message):
+def admin_messages(uid):
+    if not messages_log:
+        bot.send_message(
+            uid,
+            "🔍 پیامی ثبت نشده."
+        )
+        return
 
-    ensure_user(
-        message.from_user
-    )
+    for m in messages_log[-30:]:
+        bot.send_message(
+            uid,
+            f"💬 {m['from']} → {m['to']}\n"
+            f"نوع: {m['type']}\n"
+            f"متن: {m['text'][:500]}\n"
+            f"زمان: {m['time']}"
+        )
 
-    states[
-        message.from_user.id
-    ] = {
-        "type": "report_message"
+
+# ============================================================
+# لاگ
+# ============================================================
+
+def admin_logs_page(uid):
+    if not admin_logs:
+        bot.send_message(
+            uid,
+            "📋 لاگی وجود ندارد."
+        )
+        return
+
+    for log in admin_logs[-30:]:
+        bot.send_message(
+            uid,
+            f"📋 <b>{log['action']}</b>\n\n"
+            f"هدف: {log['target']}\n"
+            f"جزئیات: {log['details']}\n"
+            f"زمان: {log['time']}"
+        )
+
+
+# ============================================================
+# ناظر
+# ============================================================
+
+def moderator_ban(uid):
+    if not is_moderator(uid):
+        return
+
+    pending[uid] = {
+        "type": "mod_ban"
     }
 
-    bot.reply_to(
-
-        message,
-
-        "🚨 اول پیام متخلف را "
-        "فوروارد یا ارسال کن."
+    bot.send_message(
+        uid,
+        "🛡 کد کاربر و مدت دقیقه را بفرست.\n\n"
+        "مثال:\n"
+        "<code>0001 60</code>"
     )
 
 
-# =========================
-# پردازش پیام‌ها
-# =========================
+def moderator_warn(uid):
+    if not is_moderator(uid):
+        return
+
+    pending[uid] = {
+        "type": "mod_warn"
+    }
+
+    bot.send_message(
+        uid,
+        "🛡 کد کاربر و دلیل هشدار را بفرست.\n\n"
+        "مثال:\n"
+        "<code>0001 توهین</code>"
+    )
+
+
+# ============================================================
+# هندلر callback
+# ============================================================
+
+@bot.callback_query_handler(func=lambda call: True)
+def callbacks(call):
+    uid = call.from_user.id
+
+    if uid not in users:
+        bot.answer_callback_query(
+            call.id,
+            "اول /start را بزن."
+        )
+        return
+
+    data = call.data
+
+    # --------------------------
+    # عمومی
+    # --------------------------
+
+    if data == "daily":
+        daily(uid)
+
+    elif data == "rank_shop":
+        rank_shop(uid)
+
+    elif data == "referral":
+        referral_page(uid)
+
+    elif data == "profile_photo":
+        pending[uid] = {
+            "type": "profile_photo"
+        }
+
+        bot.send_message(
+            uid,
+            "🖼 عکس موردنظر را بفرست."
+        )
+
+    elif data == "profile_anon":
+        users[uid]["anonymous"] = True
+
+        bot.answer_callback_query(
+            call.id,
+            "حالت ناشناس فعال شد."
+        )
+
+        bot.send_message(
+            uid,
+            "🕵️ حالت ناشناس فعال شد."
+        )
+
+    elif data == "profile_normal":
+        users[uid]["anonymous"] = False
+
+        bot.answer_callback_query(
+            call.id,
+            "حالت عادی فعال شد."
+        )
+
+        bot.send_message(
+            uid,
+            "👁 حالت عادی فعال شد."
+        )
+
+    elif data.startswith("buy_rank:"):
+        rank = data.split(":", 1)[1]
+        buy_rank(uid, rank)
+
+    elif data == "game_coin":
+        coin_game(uid)
+
+    elif data == "game_guess":
+        guess_game(uid)
+
+    elif data == "giveaways_active":
+        show_giveaways(uid)
+
+    elif data.startswith("join_giveaway:"):
+        gid = int(data.split(":")[1])
+
+        if gid not in giveaways:
+            bot.answer_callback_query(
+                call.id,
+                "وجود ندارد."
+            )
+            return
+
+        g = giveaways[gid]
+
+        if uid not in g["entries"]:
+            g["entries"].append(uid)
+
+            bot.answer_callback_query(
+                call.id,
+                "ثبت شد!"
+            )
+
+            bot.send_message(
+                uid,
+                "🎟 در قرعه‌کشی ثبت شدی!"
+            )
+        else:
+            bot.answer_callback_query(
+                call.id,
+                "قبلاً ثبت شده‌ای."
+            )
+
+    elif data.startswith("rate:"):
+        parts = data.split(":")
+
+        target = int(parts[1])
+        chat_id = parts[2]
+        score = int(parts[3])
+
+        ratings.append({
+            "from": uid,
+            "to": target,
+            "score": score,
+            "chat": chat_id,
+            "time": now()
+        })
+
+        add_xp(uid, 5)
+
+        bot.answer_callback_query(
+            call.id,
+            "امتیاز ثبت شد ❤️"
+        )
+
+        bot.edit_message_text(
+            "⭐ امتیاز شما ثبت شد.",
+            uid,
+            call.message.message_id
+        )
+
+    # --------------------------
+    # گزارش
+    # --------------------------
+
+    elif data.startswith("report_reason:"):
+        reason = data.split(":", 1)[1]
+
+        p = pending.get(uid)
+
+        if not p:
+            return
+
+        report_id = p["report_id"]
+
+        for r in reports:
+            if r["id"] == report_id:
+                r["reason"] = reason
+                r["status"] = "new"
+                break
+
+        pending.pop(uid, None)
+
+        bot.send_message(
+            uid,
+            "🚨 گزارش با موفقیت ثبت شد."
+        )
+
+        notify(
+            ADMIN_ID,
+            f"🚨 <b>گزارش جدید</b>\n\n"
+            f"شماره گزارش: #{report_id}\n"
+            f"گزارش‌دهنده: {uid}\n"
+            f"دلیل: {reason}"
+        )
+
+    # --------------------------
+    # مدیریت
+    # --------------------------
+
+    elif data.startswith("target_coin_add:"):
+        if not is_admin(uid):
+            return
+
+        target = int(data.split(":")[1])
+
+        pending[uid] = {
+            "type": "quick_coin",
+            "target": target,
+            "sign": 1
+        }
+
+        bot.send_message(
+            uid,
+            "مقدار سکه را بفرست."
+        )
+
+    elif data.startswith("target_coin_sub:"):
+        if not is_admin(uid):
+            return
+
+        target = int(data.split(":")[1])
+
+        pending[uid] = {
+            "type": "quick_coin",
+            "target": target,
+            "sign": -1
+        }
+
+        bot.send_message(
+            uid,
+            "مقدار سکه را بفرست."
+        )
+
+    elif data.startswith("target_balance_add:"):
+        if not is_admin(uid):
+            return
+
+        target = int(data.split(":")[1])
+
+        pending[uid] = {
+            "type": "quick_balance",
+            "target": target,
+            "sign": 1
+        }
+
+        bot.send_message(
+            uid,
+            "مقدار اعتبار را بفرست."
+        )
+
+    elif data.startswith("target_balance_sub:"):
+        if not is_admin(uid):
+            return
+
+        target = int(data.split(":")[1])
+
+        pending[uid] = {
+            "type": "quick_balance",
+            "target": target,
+            "sign": -1
+        }
+
+        bot.send_message(
+            uid,
+            "مقدار اعتبار را بفرست."
+        )
+
+    elif data.startswith("target_xp_add:"):
+        if not is_admin(uid):
+            return
+
+        target = int(data.split(":")[1])
+
+        pending[uid] = {
+            "type": "quick_xp",
+            "target": target
+        }
+
+        bot.send_message(
+            uid,
+            "مقدار XP را بفرست."
+        )
+
+    elif data.startswith("target_rank:"):
+        if not is_admin(uid):
+            return
+
+        target = int(data.split(":")[1])
+
+        pending[uid] = {
+            "type": "quick_rank",
+            "target": target
+        }
+
+        bot.send_message(
+            uid,
+            "رنک را بفرست:\n"
+            "silver / gold / diamond / vip / moderator"
+        )
+
+    elif data.startswith("target_ban:"):
+        if not is_admin(uid):
+            return
+
+        target = int(data.split(":")[1])
+
+        if target in users:
+            users[target]["banned"] = True
+
+            notify(
+                target,
+                "🚫 حساب شما توسط مدیریت مسدود شد."
+            )
+
+            admin_log(
+                "بن دائمی",
+                target
+            )
+
+            bot.send_message(
+                uid,
+                "🚫 کاربر مسدود شد."
+            )
+
+    elif data.startswith("target_unban:"):
+        if not is_admin(uid):
+            return
+
+        target = int(data.split(":")[1])
+
+        if target in users:
+            users[target]["banned"] = False
+
+            notify(
+                target,
+                "🔓 حساب شما از مسدودی خارج شد."
+            )
+
+            admin_log(
+                "رفع بن",
+                target
+            )
+
+            bot.send_message(
+                uid,
+                "🔓 رفع مسدودی شد."
+            )
+
+    # --------------------------
+    # پنل مدیریت
+    # --------------------------
+
+    elif data == "admin_dashboard":
+        if is_admin(uid):
+            admin_dashboard(uid)
+
+    elif data == "admin_users":
+        if is_admin(uid):
+            admin_users(uid)
+
+    elif data == "admin_search":
+        if is_admin(uid):
+            admin_search_start(uid)
+
+    elif data == "admin_reports":
+        if is_admin(uid):
+            admin_reports(uid)
+
+    elif data == "admin_mods":
+        if is_admin(uid):
+            admin_mods(uid)
+
+    elif data == "admin_warnings":
+        if is_admin(uid):
+            admin_warnings(uid)
+
+    elif data == "admin_coins":
+        if is_admin(uid):
+            admin_coins_start(uid)
+
+    elif data == "admin_balance":
+        if is_admin(uid):
+            admin_balance_start(uid)
+
+    elif data == "admin_xp":
+        if is_admin(uid):
+            admin_xp_start(uid)
+
+    elif data == "admin_rank":
+        if is_admin(uid):
+            admin_rank_start(uid)
+
+    elif data == "admin_giveaway":
+        if is_admin(uid):
+            create_giveaway_start(uid)
+
+    elif data == "admin_challenge":
+        if is_admin(uid):
+            create_challenge_start(uid)
+
+    elif data == "admin_broadcast":
+        if is_admin(uid):
+            broadcast_start(uid)
+
+    elif data == "admin_reviews":
+        if is_admin(uid):
+            admin_reviews(uid)
+
+    elif data == "admin_suggestions":
+        if is_admin(uid):
+            admin_suggestions(uid)
+
+    elif data == "admin_stats":
+        if is_admin(uid):
+            admin_stats(uid)
+
+    elif data == "admin_logs":
+        if is_admin(uid):
+            admin_logs_page(uid)
+
+    elif data == "admin_chats":
+        if is_admin(uid):
+            admin_chats(uid)
+
+    elif data == "admin_messages":
+        if is_admin(uid):
+            admin_messages(uid)
+
+    elif data == "admin_ban":
+        if is_admin(uid):
+            admin_ban_start(uid)
+
+    elif data == "admin_unban":
+        if is_admin(uid):
+            admin_unban_start(uid)
+
+    elif data == "admin_tempban":
+        if is_admin(uid):
+            pending[uid] = {"type": "admin_tempban"}
+
+            bot.send_message(
+                uid,
+                "کد کاربر، مدت دقیقه و دلیل:\n\n"
+                "<code>0001 60 اسپم</code>"
+            )
+
+    elif data == "admin_rewards":
+        bot.send_message(
+            uid,
+            "🎟 مدیریت جوایز آماده است."
+        )
+
+    elif data == "admin_games":
+        bot.send_message(
+            uid,
+            "🎮 مدیریت بازی‌ها آماده است."
+        )
+
+    elif data == "admin_missions":
+        bot.send_message(
+            uid,
+            "🎯 مدیریت مأموریت‌ها آماده است."
+        )
+
+    elif data == "admin_rank_settings":
+        bot.send_message(
+            uid,
+            "🏅 تنظیمات رنک‌ها در بخش RANKS بالای کد قرار دارد."
+        )
+
+    elif data == "admin_cleanup":
+        bot.send_message(
+            uid,
+            "🧹 برای پاکسازی از دستورات مدیریتی استفاده کن."
+        )
+
+    elif data == "admin_settings":
+        bot.send_message(
+            uid,
+            "⚙️ تنظیمات اصلی بات در ابتدای فایل قرار دارد."
+        )
+
+    elif data == "admin_security":
+        bot.send_message(
+            uid,
+            "🔐 امنیت:\n\n"
+            "توکن را در کد عمومی منتشر نکن.\n"
+            "برای نسخه واقعی از دیتابیس استفاده کن."
+        )
+
+    elif data == "admin_export":
+        text = "uid,code,name,coins,balance,xp,level\n"
+
+        for u in users.values():
+            text += (
+                f"{u['id']},"
+                f"{u['code']},"
+                f"{u['name']},"
+                f"{u['coins']},"
+                f"{u['balance']},"
+                f"{u['xp']},"
+                f"{u['level']}\n"
+            )
+
+        bot.send_document(
+            uid,
+            ("users.csv", text.encode("utf-8"))
+        )
+
+    # --------------------------
+    # ناظر
+    # --------------------------
+
+    elif data == "mod_chats":
+        if is_moderator(uid):
+            admin_chats(uid)
+
+    elif data == "mod_ban":
+        if is_moderator(uid):
+            moderator_ban(uid)
+
+    elif data == "mod_warn":
+        if is_moderator(uid):
+            moderator_warn(uid)
+
+    elif data == "mod_reports":
+        if is_moderator(uid):
+            admin_reports(uid)
+
+    elif data == "new_review":
+        pending[uid] = {
+            "type": "review"
+        }
+
+        bot.send_message(
+            uid,
+            "⭐ نظر خودت را بفرست."
+        )
+
+    elif data == "new_suggestion":
+        pending[uid] = {
+            "type": "suggestion"
+        }
+
+        bot.send_message(
+            uid,
+            "💡 پیشنهادت را بفرست."
+        )
+
+    bot.answer_callback_query(call.id)
+
+
+# ============================================================
+# دریافت عکس پروفایل
+# ============================================================
+
+@bot.message_handler(content_types=["photo"])
+def photo_handler(message):
+    uid = message.from_user.id
+
+    if uid not in users:
+        ensure_user(message)
+
+    touch(uid)
+
+    p = pending.get(uid)
+
+    # عکس پروفایل
+    if p and p.get("type") == "profile_photo":
+        file_id = message.photo[-1].file_id
+
+        users[uid]["photo"] = file_id
+
+        pending.pop(uid, None)
+
+        bot.send_message(
+            uid,
+            "🖼 عکس پروفایل ذخیره شد."
+        )
+        return
+
+    # گزارش
+    if p and p.get("type") == "report_message":
+        finish_report_message(message)
+        return
+
+    # چت
+    if uid in chats:
+        partner = chats[uid]["partner"]
+
+        bot.send_photo(
+            partner,
+            message.photo[-1].file_id,
+            caption=(
+                "🕵️ پیام تصویری از مخاطب\n\n"
+                f"🏅 {visible_rank(uid)}"
+            )
+        )
+
+        users[uid]["messages"] += 1
+
+        messages_log.append({
+            "from": uid,
+            "to": partner,
+            "type": "photo",
+            "text": message.caption or "",
+            "time": now()
+        })
+
+        return
+
+
+# ============================================================
+# فایل / ویدیو / صدا
+# ============================================================
 
 @bot.message_handler(
     content_types=[
-        "text",
-        "photo",
         "video",
+        "document",
         "voice",
-        "document"
+        "audio",
+        "animation"
     ]
 )
-def all_messages(message):
-
+def media_handler(message):
     uid = message.from_user.id
 
-    ensure_user(
-        message.from_user
-    )
+    if uid not in users:
+        ensure_user(message)
 
-    # اگر کاربر در چت است،
-    # پیام را برای طرف مقابل بفرست
-    if relay_message(message):
+    touch(uid)
 
+    p = pending.get(uid)
+
+    if p and p.get("type") == "report_message":
+        finish_report_message(message)
         return
 
-    # بازی
-    if uid in games:
+    if uid not in chats:
+        bot.send_message(
+            uid,
+            "برای ارسال این نوع پیام باید داخل چت باشید."
+        )
+        return
 
-        try:
+    partner = chats[uid]["partner"]
 
-            answer = int(
-                message.text
+    try:
+        if message.content_type == "video":
+            bot.send_video(
+                partner,
+                message.video.file_id,
+                caption=message.caption or ""
             )
 
-        except:
+        elif message.content_type == "document":
+            bot.send_document(
+                partner,
+                message.document.file_id,
+                caption=message.caption or ""
+            )
+
+        elif message.content_type == "voice":
+            bot.send_voice(
+                partner,
+                message.voice.file_id
+            )
+
+        elif message.content_type == "audio":
+            bot.send_audio(
+                partner,
+                message.audio.file_id
+            )
+
+        elif message.content_type == "animation":
+            bot.send_animation(
+                partner,
+                message.animation.file_id
+            )
+
+        users[uid]["messages"] += 1
+
+        messages_log.append({
+            "from": uid,
+            "to": partner,
+            "type": message.content_type,
+            "text": message.caption or "",
+            "time": now()
+        })
+
+    except Exception:
+        bot.send_message(
+            uid,
+            "❌ ارسال پیام انجام نشد."
+        )
+
+
+# ============================================================
+# پیام‌های متنی
+# ============================================================
+
+@bot.message_handler(content_types=["text"])
+def text_handler(message):
+    uid = message.from_user.id
+    text = message.text.strip()
+
+    if uid not in users:
+        ensure_user(message)
+
+    touch(uid)
+
+    # --------------------------
+    # بن
+    # --------------------------
+
+    if is_banned(uid):
+        bot.send_message(
+            uid,
+            "🚫 حساب شما مسدود است."
+        )
+        return
+
+    # --------------------------
+    # دستورات
+    # --------------------------
+
+    if text == "/end":
+        end_chat(uid)
+        return
+
+    if text == "/cancel":
+        if uid in waiting_users:
+            waiting_users.remove(uid)
 
             bot.send_message(
                 uid,
-                "❌ فقط یک عدد بین ۱ تا ۵ بفرست."
+                "❌ از صف خارج شدی."
             )
-
-            return
-
-        correct = games.pop(uid)
-
-        if answer == correct:
-
-            users[uid]["coins"] += 20
-
-            add_xp(
-                uid,
-                10
-            )
-
-            bot.send_message(
-                uid,
-                "🎉 درست حدس زدی!\n\n"
-                "🪙 +۲۰ سکه\n"
-                "⭐ +۱۰ XP"
-            )
-
         else:
-
             bot.send_message(
                 uid,
-                f"❌ اشتباه بود!\n"
-                f"عدد درست: {correct}"
+                "شما در صف نیستی."
             )
-
         return
 
-    # Stateهای بعدی اینجا پردازش می‌شوند
-    state = states.get(uid)
+    if text == "/block":
+        block_user(uid)
+        return
 
-    if state:
+    if text == "/report":
+        start_report(uid)
+        return
 
-        state_type = state["type"]
+    if text == "/daily":
+        daily(uid)
+        return
 
-        # نظر
-        if state_type == "review":
+    if text == "/profile":
+        send_profile(uid)
+        return
 
+    if text == "/shop":
+        rank_shop(uid)
+        return
+
+    if text == "/chat":
+        start_chat(uid)
+        return
+
+    if text == "/help":
+        bot.send_message(
+            uid,
+            "❓ <b>راهنما</b>\n\n"
+            "/start\n"
+            "/chat\n"
+            "/end\n"
+            "/cancel\n"
+            "/profile\n"
+            "/shop\n"
+            "/daily\n"
+            "/report\n"
+            "/block\n"
+            "/help\n"
+            "/privacy"
+        )
+        return
+
+    if text == "/privacy":
+        bot.send_message(
+            uid,
+            "🔐 <b>حریم خصوصی</b>\n\n"
+            "بات اطلاعاتی را که برای عملکرد سرویس لازم است "
+            "ذخیره می‌کند.\n\n"
+            "شماره تلفن فقط در صورتی در اختیار بات قرار می‌گیرد "
+            "که خود کاربر آن را ارسال کند."
+        )
+        return
+
+    # --------------------------
+    # منو
+    # --------------------------
+
+    if text == "💬 چت":
+        start_chat(uid)
+        return
+
+    if text == "👤 پروفایل":
+        send_profile(uid)
+        return
+
+    if text == "🪙 سکه":
+        coins_page(uid)
+        return
+
+    if text == "⭐ رنک‌ها":
+        rank_shop(uid)
+        return
+
+    if text == "🎮 بازی":
+        game_menu(uid)
+        return
+
+    if text == "🎯 مأموریت‌ها":
+        mission_page(uid)
+        return
+
+    if text == "🎁 جوایز":
+        giveaway_menu(uid)
+        return
+
+    if text == "🏆 چالش‌ها":
+        challenge_menu(uid)
+        return
+
+    if text == "👥 دعوت دوستان":
+        referral_page(uid)
+        return
+
+    if text == "⚙️ تنظیمات":
+        settings_page(uid)
+        return
+
+    if text == "❓ راهنما":
+        bot.send_message(
+            uid,
+            "❓ <b>راهنما</b>\n\n"
+            "💬 چت: ورود به صف چت ناشناس\n"
+            "👤 پروفایل: مشاهده حساب\n"
+            "🪙 سکه: موجودی و جایزه\n"
+            "⭐ رنک‌ها: خرید رنک\n"
+            "🎮 بازی: بازی و دریافت جایزه\n"
+            "🚨 گزارش: گزارش مخاطب\n"
+            "🚫 بلاک: مسدود کردن مخاطب"
+        )
+        return
+
+    if text == "📝 نظر و پیشنهاد":
+        review_page(uid)
+        return
+
+    if text == "🛠 پنل مدیریت":
+        if is_admin(uid):
+            admin_panel(uid)
+        return
+
+    if text == "🛡 پنل ناظر":
+        if is_moderator(uid):
+            bot.send_message(
+                uid,
+                "🛡 <b>پنل ناظر</b>",
+                reply_markup=moderator_menu()
+            )
+        return
+
+    # --------------------------
+    # حالت‌های در انتظار
+    # --------------------------
+
+    p = pending.get(uid)
+
+    if p:
+        ptype = p.get("type")
+
+        # عکس
+        if ptype == "profile_photo":
+            bot.send_message(
+                uid,
+                "🖼 لطفاً یک عکس ارسال کن."
+            )
+            return
+
+        # گزارش
+        if ptype == "report_message":
+            finish_report_message(message)
+            return
+
+        # review
+        if ptype == "review":
             reviews.append({
-
-                "user": uid,
-
-                "text": message.text or "",
-
+                "uid": uid,
+                "text": text,
                 "time": now()
             })
 
-            states.pop(uid)
+            pending.pop(uid, None)
 
             bot.send_message(
                 uid,
-                "✅ نظر شما ثبت شد."
+                "⭐ ممنون! نظر شما ثبت شد."
+            )
+
+            notify(
+                ADMIN_ID,
+                "⭐ <b>نظر جدید</b>\n\n"
+                f"کاربر: {uid}\n"
+                f"{text}"
             )
 
             return
 
-        # پیشنهاد
-        if state_type == "suggestion":
-
+        # suggestion
+        if ptype == "suggestion":
             suggestions.append({
-
-                "user": uid,
-
-                "text": message.text or "",
-
+                "uid": uid,
+                "text": text,
                 "time": now()
             })
 
-            states.pop(uid)
+            pending.pop(uid, None)
 
             bot.send_message(
                 uid,
-                "✅ پیشنهاد شما ثبت شد."
+                "💡 پیشنهاد شما ثبت شد."
+            )
+
+            notify(
+                ADMIN_ID,
+                "💡 <b>پیشنهاد جدید</b>\n\n"
+                f"کاربر: {uid}\n"
+                f"{text}"
             )
 
             return
 
-        # جستجوی کاربر توسط ادمین
-        if (
-            state_type == "admin_search"
-            and is_admin(uid)
-        ):
+        # حدس عدد
+        if ptype == "guess":
+            try:
+                guess = int(text)
 
-            user = find_user(
-                message.text
-            )
+                if guess < 1 or guess > 5:
+                    raise ValueError
 
-            states.pop(uid)
+                number = p["number"]
 
-            if not user:
+                pending.pop(uid, None)
 
+                users[uid]["game_plays"] += 1
+
+                if guess == number:
+                    reward = 100
+
+                    users[uid]["coins"] += reward
+                    users[uid]["game_wins"] += 1
+
+                    add_xp(uid, 20)
+
+                    bot.send_message(
+                        uid,
+                        "🎉 درست حدس زدی!\n\n"
+                        f"🪙 +{reward} سکه"
+                    )
+                else:
+                    bot.send_message(
+                        uid,
+                        f"❌ اشتباه!\n"
+                        f"عدد درست: {number}"
+                    )
+
+            except Exception:
+                bot.send_message(
+                    uid,
+                    "فقط یک عدد بین ۱ تا ۵ بفرست."
+                )
+
+            return
+
+        # جستجوی ادمین
+        if ptype == "admin_search":
+            if not is_admin(uid):
+                pending.pop(uid, None)
+                return
+
+            target = find_user(text)
+
+            pending.pop(uid, None)
+
+            if not target:
                 bot.send_message(
                     uid,
                     "❌ کاربر پیدا نشد."
                 )
-
                 return
 
-            ranks = active_ranks(
-                user["id"]
-            )
-
-            rank_names = ", ".join(
-
-                RANKS[
-                    r["name"]
-                ]["title"]
-
-                for r in ranks
-            )
-
-            bot.send_message(
-
-                uid,
-
-                "👤 <b>اطلاعات کامل کاربر</b>\n\n"
-
-                f"Telegram ID: "
-                f"<code>{user['id']}</code>\n"
-
-                f"Username: "
-                f"@{user['username'] or 'ندارد'}\n"
-
-                f"نام: "
-                f"{user['first_name']} "
-                f"{user['last_name']}\n"
-
-                f"شماره تلفن: "
-                f"{user['phone'] or 'ثبت نشده'}\n"
-
-                f"کد حساب: "
-                f"{user['code']}\n"
-
-                f"رنک‌ها: "
-                f"{rank_names or 'ندارد'}\n"
-
-                f"سطح: "
-                f"{user['level']}\n"
-
-                f"XP: "
-                f"{user['xp']}\n"
-
-                f"سکه: "
-                f"{user['coins']}\n"
-
-                f"اعتبار مجازی: "
-                f"{user['balance']:,} تومان\n"
-
-                f"چت‌ها: "
-                f"{user['chats']}\n"
-
-                f"پیام‌ها: "
-                f"{user['messages']}\n"
-
-                f"دعوت‌ها: "
-                f"{user['referrals']}\n"
-
-                f"هشدارها: "
-                f"{user['warnings']}\n"
-
-                f"بن: "
-                f"{'بله' if banned(user['id']) else 'خیر'}\n\n"
-
-                f"عضویت: "
-                f"{user['created_at']}\n"
-
-                f"آخرین فعالیت: "
-                f"{user['last_activity']}"
-            )
-
+            show_admin_user(uid, target)
             return
 
         # مدیریت سکه
-        if (
-            state_type == "admin_coins"
-            and is_admin(uid)
-        ):
+        if ptype == "admin_coins":
+            if not is_admin(uid):
+                pending.pop(uid, None)
+                return
 
-            parts = message.text.split()
+            parts = text.split()
 
             if len(parts) != 2:
-
                 bot.send_message(
                     uid,
-                    "❌ فرمت اشتباه."
+                    "فرمت اشتباه است."
                 )
-
                 return
 
-            user = find_user(
-                parts[0]
-            )
+            target = find_user(parts[0])
+
+            if not target:
+                bot.send_message(
+                    uid,
+                    "کاربر پیدا نشد."
+                )
+                return
 
             try:
-
-                amount = int(
-                    parts[1]
-                )
-
+                amount = int(parts[1])
             except:
-
                 bot.send_message(
                     uid,
-                    "❌ مقدار باید عدد باشد."
+                    "مقدار باید عدد باشد."
                 )
-
                 return
 
-            if not user:
+            apply_coin_change(target, amount)
 
-                bot.send_message(
-                    uid,
-                    "❌ کاربر پیدا نشد."
-                )
-
-                return
-
-            old = user["coins"]
-
-            user["coins"] += amount
-
-            admin_log(
-                "coins",
-                user["id"],
-                old,
-                user["coins"],
-                amount
-            )
-
-            if amount >= 0:
-
-                notify_user(
-
-                    user["id"],
-
-                    f"🪙 {amount:,} سکه "
-                    "از طرف مدیریت به حساب شما اضافه شد."
-                )
-
-            else:
-
-                notify_user(
-
-                    user["id"],
-
-                    f"🪙 {abs(amount):,} سکه "
-                    "از حساب شما کم شد."
-                )
-
-            states.pop(uid)
+            pending.pop(uid, None)
 
             bot.send_message(
                 uid,
                 "✅ انجام شد."
             )
-
             return
 
         # مدیریت اعتبار
-        if (
-            state_type == "admin_balance"
-            and is_admin(uid)
-        ):
+        if ptype == "admin_balance":
+            if not is_admin(uid):
+                pending.pop(uid, None)
+                return
 
-            parts = message.text.split()
+            parts = text.split()
 
             if len(parts) != 2:
                 return
 
-            user = find_user(
-                parts[0]
-            )
+            target = find_user(parts[0])
+
+            if not target:
+                bot.send_message(
+                    uid,
+                    "کاربر پیدا نشد."
+                )
+                return
 
             try:
-
-                amount = int(
-                    parts[1]
-                )
-
+                amount = int(parts[1])
             except:
-
                 return
 
-            if not user:
-                return
+            apply_balance_change(target, amount)
 
-            old = user["balance"]
-
-            user["balance"] += amount
-
-            admin_log(
-                "balance",
-                user["id"],
-                old,
-                user["balance"],
-                amount
-            )
-
-            if amount >= 0:
-
-                notify_user(
-
-                    user["id"],
-
-                    f"💰 {amount:,} تومان "
-                    "اعتبار مجازی به حساب شما اضافه شد."
-                )
-
-            else:
-
-                notify_user(
-
-                    user["id"],
-
-                    f"💰 {abs(amount):,} تومان "
-                    "اعتبار مجازی از حساب شما کم شد."
-                )
-
-            states.pop(uid)
+            pending.pop(uid, None)
 
             bot.send_message(
                 uid,
                 "✅ انجام شد."
             )
-
             return
 
         # مدیریت XP
-        if (
-            state_type == "admin_xp"
-            and is_admin(uid)
-        ):
+        if ptype == "admin_xp":
+            if not is_admin(uid):
+                pending.pop(uid, None)
+                return
 
-            parts = message.text.split()
+            parts = text.split()
 
             if len(parts) != 2:
                 return
 
-            user = find_user(
-                parts[0]
-            )
+            target = find_user(parts[0])
+
+            if not target:
+                return
 
             try:
-
-                amount = int(
-                    parts[1]
-                )
-
+                amount = int(parts[1])
             except:
-
                 return
 
-            if not user:
-                return
+            add_xp(target, amount)
 
-            old = user["xp"]
-
-            user["xp"] += amount
-
-            level_up(user)
+            notify(
+                target,
+                f"⭐ <b>XP شما افزایش یافت</b>\n\n"
+                f"+{amount} XP"
+            )
 
             admin_log(
-                "xp",
-                user["id"],
-                old,
-                user["xp"],
+                "افزایش XP",
+                target,
+                str(amount)
+            )
+
+            pending.pop(uid, None)
+
+            bot.send_message(
+                uid,
+                "✅ XP اضافه شد."
+            )
+            return
+
+        # مدیریت رنک
+        if ptype == "admin_rank":
+            if not is_admin(uid):
+                pending.pop(uid, None)
+                return
+
+            parts = text.split()
+
+            if len(parts) != 2:
+                bot.send_message(
+                    uid,
+                    "مثال: 0001 gold"
+                )
+                return
+
+            target = find_user(parts[0])
+            rank = parts[1].lower()
+
+            if not target or rank not in RANKS:
+                bot.send_message(
+                    uid,
+                    "اطلاعات اشتباه است."
+                )
+                return
+
+            give_rank_admin(target, rank)
+
+            pending.pop(uid, None)
+
+            bot.send_message(
+                uid,
+                "🏆 رنک داده شد."
+            )
+            return
+
+        # بن
+        if ptype == "admin_ban":
+            if not is_admin(uid):
+                pending.pop(uid, None)
+                return
+
+            target = find_user(text)
+
+            if not target:
+                bot.send_message(
+                    uid,
+                    "کاربر پیدا نشد."
+                )
+                return
+
+            users[target]["banned"] = True
+
+            notify(
+                target,
+                "🚫 حساب شما توسط مدیریت مسدود شد."
+            )
+
+            admin_log(
+                "بن دائمی",
+                target
+            )
+
+            pending.pop(uid, None)
+
+            bot.send_message(
+                uid,
+                "🚫 کاربر بن شد."
+            )
+            return
+
+        # رفع بن
+        if ptype == "admin_unban":
+            if not is_admin(uid):
+                pending.pop(uid, None)
+                return
+
+            target = find_user(text)
+
+            if not target:
+                bot.send_message(
+                    uid,
+                    "کاربر پیدا نشد."
+                )
+                return
+
+            users[target]["banned"] = False
+
+            notify(
+                target,
+                "🔓 حساب شما از مسدودی خارج شد."
+            )
+
+            admin_log(
+                "رفع بن",
+                target
+            )
+
+            pending.pop(uid, None)
+
+            bot.send_message(
+                uid,
+                "🔓 انجام شد."
+            )
+            return
+
+        # بن موقت
+        if ptype == "admin_tempban":
+            if not is_admin(uid):
+                pending.pop(uid, None)
+                return
+
+            parts = text.split(maxsplit=2)
+
+            if len(parts) < 2:
+                return
+
+            target = find_user(parts[0])
+
+            try:
+                minutes = int(parts[1])
+            except:
+                return
+
+            reason = parts[2] if len(parts) >= 3 else "بدون دلیل"
+
+            if not target:
+                return
+
+            temp_bans[target] = {
+                "until": now() + timedelta(minutes=minutes),
+                "reason": reason
+            }
+
+            notify(
+                target,
+                "⏱ <b>مسدودی موقت</b>\n\n"
+                f"مدت: {minutes} دقیقه\n"
+                f"دلیل: {reason}"
+            )
+
+            admin_log(
+                "بن موقت",
+                target,
+                f"{minutes} دقیقه - {reason}"
+            )
+
+            pending.pop(uid, None)
+
+            bot.send_message(
+                uid,
+                "⏱ بن موقت انجام شد."
+            )
+            return
+
+        # پیام همگانی
+        if ptype == "broadcast":
+            if not is_admin(uid):
+                pending.pop(uid, None)
+                return
+
+            count = broadcast(text)
+
+            pending.pop(uid, None)
+
+            bot.send_message(
+                uid,
+                f"📢 پیام برای {count} نفر ارسال شد."
+            )
+            return
+
+        # تغییر سریع سکه
+        if ptype == "quick_coin":
+            if not is_admin(uid):
+                return
+
+            try:
+                amount = int(text)
+            except:
+                return
+
+            amount *= p["sign"]
+
+            apply_coin_change(
+                p["target"],
                 amount
             )
 
-            notify_user(
-
-                user["id"],
-
-                f"⭐ {abs(amount):,} XP "
-                f"{'اضافه' if amount >= 0 else 'کم'} شد."
-            )
-
-            states.pop(uid)
+            pending.pop(uid, None)
 
             bot.send_message(
                 uid,
                 "✅ انجام شد."
             )
-
             return
 
-        # مدیریت رنک
-        if (
-            state_type == "admin_rank"
-            and is_admin(uid)
-        ):
-
-            parts = message.text.split()
-
-            if len(parts) != 2:
+        # تغییر سریع اعتبار
+        if ptype == "quick_balance":
+            if not is_admin(uid):
                 return
 
-            user = find_user(
-                parts[0]
-            )
-
-            rank_name = parts[1].lower()
-
-            if (
-                not user
-                or rank_name not in RANKS
-            ):
-
-                bot.send_message(
-                    uid,
-                    "❌ کاربر یا رنک نامعتبر است."
-                )
-
+            try:
+                amount = int(text)
+            except:
                 return
 
-            user["ranks"].append({
+            amount *= p["sign"]
 
-                "name": rank_name,
-
-                "expires":
-                    now() + timedelta(days=30)
-            })
-
-            admin_log(
-                "rank",
-                user["id"],
-                None,
-                rank_name
+            apply_balance_change(
+                p["target"],
+                amount
             )
 
-            notify_user(
-
-                user["id"],
-
-                f"🏆 رنک "
-                f"<b>{RANKS[rank_name]['title']}</b> "
-                "توسط مدیریت برای شما فعال شد.\n"
-                "⏳ مدت: ۳۰ روز"
-            )
-
-            states.pop(uid)
+            pending.pop(uid, None)
 
             bot.send_message(
                 uid,
-                "✅ رنک اضافه شد."
+                "✅ انجام شد."
             )
-
             return
 
-    # اگر چت فعال نبود
+        # XP سریع
+        if ptype == "quick_xp":
+            if not is_admin(uid):
+                return
+
+            try:
+                amount = int(text)
+            except:
+                return
+
+            add_xp(
+                p["target"],
+                amount
+            )
+
+            notify(
+                p["target"],
+                f"⭐ +{amount} XP"
+            )
+
+            admin_log(
+                "افزایش سریع XP",
+                p["target"],
+                str(amount)
+            )
+
+            pending.pop(uid, None)
+
+            bot.send_message(
+                uid,
+                "✅ انجام شد."
+            )
+            return
+
+        # رنک سریع
+        if ptype == "quick_rank":
+            if not is_admin(uid):
+                return
+
+            rank = text.lower()
+
+            if rank not in RANKS:
+                bot.send_message(
+                    uid,
+                    "رنک اشتباه است."
+                )
+                return
+
+            give_rank_admin(
+                p["target"],
+                rank
+            )
+
+            pending.pop(uid, None)
+
+            bot.send_message(
+                uid,
+                "🏆 رنک داده شد."
+            )
+            return
+
+        # ناظر بن
+        if ptype == "mod_ban":
+            if not is_moderator(uid):
+                return
+
+            parts = text.split(maxsplit=1)
+
+            if len(parts) < 2:
+                bot.send_message(
+                    uid,
+                    "مثال: 0001 60"
+                )
+                return
+
+            target = find_user(parts[0])
+
+            try:
+                minutes = int(parts[1])
+            except:
+                return
+
+            if not target:
+                return
+
+            temp_bans[target] = {
+                "until": now() + timedelta(minutes=minutes),
+                "reason": "اقدام ناظر"
+            }
+
+            notify(
+                target,
+                f"🛡 شما {minutes} دقیقه توسط ناظر مسدود شدید."
+            )
+
+            admin_log(
+                "بن توسط ناظر",
+                target,
+                f"{minutes} دقیقه - ناظر {uid}"
+            )
+
+            pending.pop(uid, None)
+
+            bot.send_message(
+                uid,
+                "🛡 انجام شد."
+            )
+            return
+
+        # ناظر هشدار
+        if ptype == "mod_warn":
+            if not is_moderator(uid):
+                return
+
+            parts = text.split(maxsplit=1)
+
+            if len(parts) < 2:
+                return
+
+            target = find_user(parts[0])
+            reason = parts[1]
+
+            if not target:
+                return
+
+            users[target]["warnings"] += 1
+
+            warnings.append({
+                "target": target,
+                "admin": uid,
+                "reason": reason,
+                "time": now()
+            })
+
+            notify(
+                target,
+                f"⚠️ <b>هشدار</b>\n\n"
+                f"دلیل: {reason}\n"
+                f"تعداد هشدار: {users[target]['warnings']}"
+            )
+
+            pending.pop(uid, None)
+
+            bot.send_message(
+                uid,
+                "⚠️ هشدار ثبت شد."
+            )
+            return
+
+    # --------------------------
+    # پیام در چت
+    # --------------------------
+
+    if uid in chats:
+        partner = chats[uid]["partner"]
+
+        # بررسی بلاک
+        if uid in blocks and partner in blocks[uid]:
+            bot.send_message(
+                uid,
+                "🚫 این کاربر مسدود شده."
+            )
+            return
+
+        sender = users[uid]
+
+        if sender["anonymous"]:
+            prefix = "🕵️ مخاطب"
+        else:
+            prefix = display_name(uid)
+
+        rank = visible_rank(uid)
+
+        output = (
+            f"<b>{prefix}</b> "
+            f"({rank}) گفت:\n"
+            f"{text}"
+        )
+
+        try:
+            bot.send_message(
+                partner,
+                output
+            )
+
+            sender["messages"] += 1
+
+            messages_log.append({
+                "from": uid,
+                "to": partner,
+                "type": "text",
+                "text": text,
+                "time": now()
+            })
+
+            add_xp(uid, 1)
+
+        except Exception:
+            bot.send_message(
+                uid,
+                "❌ ارسال پیام انجام نشد."
+            )
+
+        return
+
+    # --------------------------
+    # متن ناشناخته
+    # --------------------------
+
     bot.send_message(
-
         uid,
-
-        "از منوی پایین یک گزینه را انتخاب کن 👇",
+        "از منوی بات استفاده کن 👇",
         reply_markup=main_menu(uid)
     )
 
 
-# =========================
-# جایزه روزانه
-# =========================
+# ============================================================
+# دریافت شماره تلفن
+# ============================================================
 
-@bot.message_handler(
-    commands=["daily"]
-)
-def daily(message):
+@bot.message_handler(content_types=["contact"])
+def contact_handler(message):
+    uid = message.from_user.id
 
-    user = ensure_user(
-        message.from_user
-    )
+    if uid not in users:
+        ensure_user(message)
 
-    last = user.get(
-        "last_daily"
-    )
+    if message.contact.user_id == uid:
+        users[uid]["phone"] = message.contact.phone_number
 
-    if (
-        last
-        and
-        (now() - last).total_seconds()
-        < 86400
-    ):
-
-        bot.reply_to(
-            message,
-            "⏳ جایزه امروز را قبلاً گرفتی."
+        bot.send_message(
+            uid,
+            "📱 شماره تلفن شما ذخیره شد."
         )
 
-        return
 
-    user["last_daily"] = now()
+# ============================================================
+# کارگر قرعه‌کشی و چالش
+# ============================================================
 
-    user["coins"] += 50
+def background_worker():
+    while True:
+        try:
+            current = now()
 
-    add_xp(
-        user["id"],
-        10
-    )
+            # قرعه‌کشی
+            for gid, g in list(giveaways.items()):
 
-    bot.reply_to(
+                if g["status"] != "active":
+                    continue
 
-        message,
+                if current >= g["end"]:
+                    g["status"] = "finished"
 
-        "🎁 جایزه روزانه گرفتی!\n\n"
-        "🪙 +۵۰ سکه\n"
-        "⭐ +۱۰ XP"
-    )
+                    entries = list(g["entries"])
+
+                    if g.get("online_only"):
+                        entries = [
+                            x for x in entries
+                            if x in user_last_activity
+                            and
+                            current - user_last_activity[x]
+                            <= timedelta(minutes=ONLINE_MINUTES)
+                        ]
+
+                    if not entries:
+                        notify(
+                            ADMIN_ID,
+                            f"🎁 قرعه‌کشی #{gid} تمام شد ولی برنده‌ای پیدا نشد."
+                        )
+                        continue
+
+                    random.shuffle(entries)
+
+                    winners = entries[:g["winners"]]
+
+                    for winner in winners:
+
+                        # اگر جایزه عددی باشد به عنوان سکه
+                        nums = re.findall(
+                            r"\d+",
+                            str(g["prize"])
+                        )
+
+                        if nums and "سکه" in str(g["prize"]):
+                            amount = int(nums[0])
+
+                            users[winner]["coins"] += amount
+
+                            notify(
+                                winner,
+                                f"🎉 <b>برنده قرعه‌کشی شدی!</b>\n\n"
+                                f"🎁 {g['title']}\n"
+                                f"🪙 +{amount} سکه"
+                            )
+
+                        else:
+                            notify(
+                                winner,
+                                f"🎉 <b>برنده قرعه‌کشی شدی!</b>\n\n"
+                                f"🎁 {g['title']}\n"
+                                f"جایزه: {g['prize']}"
+                            )
+
+                        users[winner]["wins"] += 1
+
+                    notify(
+                        ADMIN_ID,
+                        f"🎉 قرعه‌کشی #{gid} تمام شد.\n"
+                        f"برنده‌ها: {winners}"
+                    )
+
+            # چالش
+            for cid, c in list(challenges.items()):
+
+                if c["status"] != "active":
+                    continue
+
+                if current >= c["end"]:
+                    c["status"] = "finished"
+
+                    ranking = []
+
+                    for uid, u in users.items():
+
+                        value = 0
+
+                        if c["type"] == "messages":
+                            value = u["messages"] - c["baseline"].get(uid, 0)
+
+                        elif c["type"] == "chats":
+                            value = u["chats"] - c["baseline"].get(uid, 0)
+
+                        elif c["type"] == "xp":
+                            value = u["xp"] - c["baseline"].get(uid, 0)
+
+                        elif c["type"] == "coins":
+                            value = u["coins"] - c["baseline"].get(uid, 0)
+
+                        elif c["type"] == "referrals":
+                            value = u["referrals"] - c["baseline"].get(uid, 0)
+
+                        ranking.append(
+                            (uid, value)
+                        )
+
+                    ranking.sort(
+                        key=lambda x: x[1],
+                        reverse=True
+                    )
+
+                    winners = [
+                        x[0]
+                        for x in ranking[:c["winners"]]
+                        if x[1] > 0
+                    ]
+
+                    for winner in winners:
+                        users[winner]["coins"] += c["prize"]
+
+                        notify(
+                            winner,
+                            f"🏆 <b>چالش تمام شد!</b>\n\n"
+                            f"{c['title']}\n"
+                            f"🪙 +{c['prize']} سکه"
+                        )
+
+                    notify(
+                        ADMIN_ID,
+                        f"🏆 چالش #{cid} تمام شد.\n"
+                        f"برنده‌ها: {winners}"
+                    )
+
+        except Exception:
+            pass
+
+        time.sleep(30)
 
 
-# =========================
-# پایان
-# =========================
+# ============================================================
+# پاکسازی رنک‌های منقضی
+# ============================================================
 
-print(
-    "🤖 Anonymous Chat Bot Started..."
-)
+def rank_cleaner():
+    while True:
+        try:
+            current = now()
+
+            for u in users.values():
+                active = []
+
+                for r in u["ranks"]:
+                    if r["expires"] is None:
+                        active.append(r)
+                    elif current < r["expires"]:
+                        active.append(r)
+
+                u["ranks"] = active
+
+        except Exception:
+            pass
+
+        time.sleep(300)
+
+
+# ============================================================
+# اجرای پس‌زمینه
+# ============================================================
+
+threading.Thread(
+    target=background_worker,
+    daemon=True
+).start()
+
+threading.Thread(
+    target=rank_cleaner,
+    daemon=True
+).start()
+
+
+# ============================================================
+# اجرای بات
+# ============================================================
+
+print("================================")
+print("       CHATE ANONYMOUS")
+print("================================")
+print("Bot is running...")
 
 bot.infinity_polling(
-    skip_pending=True
+    skip_pending=True,
+    timeout=60,
+    long_polling_timeout=60
 )
