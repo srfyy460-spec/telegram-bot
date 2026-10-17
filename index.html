@@ -1,152 +1,2872 @@
 <!DOCTYPE html>
 <html lang="fa" dir="rtl">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>چت ناشناس</title>
-  <link rel="stylesheet" href="style.css" />
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#0f172a" />
+<title>چت ناشناس | نسخه حرفه‌ای</title>
+<style>
+/* ═══════════════════════════════════════════════════════════════
+   RESET & BASE
+   ═══════════════════════════════════════════════════════════════ */
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg-0: #0a0e1a;
+  --bg-1: #0f172a;
+  --bg-2: #1e293b;
+  --bg-3: #334155;
+  --bg-4: #475569;
+  --fg-0: #f8fafc;
+  --fg-1: #e2e8f0;
+  --fg-2: #94a3b8;
+  --fg-3: #64748b;
+  --primary: #6366f1;
+  --primary-2: #818cf8;
+  --primary-3: #4f46e5;
+  --success: #22c55e;
+  --success-2: #16a34a;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+  --danger-2: #dc2626;
+  --info: #06b6d4;
+  --gold: #fbbf24;
+  --silver: #cbd5e1;
+  --diamond: #67e8f9;
+  --vip: #f472b6;
+  --border: rgba(148, 163, 184, 0.15);
+  --border-strong: rgba(148, 163, 184, 0.3);
+  --radius-sm: 8px;
+  --radius: 14px;
+  --radius-lg: 20px;
+  --shadow-sm: 0 2px 8px rgba(0,0,0,0.2);
+  --shadow: 0 8px 24px rgba(0,0,0,0.3);
+  --shadow-lg: 0 20px 60px rgba(0,0,0,0.5);
+  --glow: 0 0 20px rgba(99, 102, 241, 0.5);
+  --transition: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+html {
+  height: 100%;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  font-family: 'Vazirmatn', 'Segoe UI', 'Tahoma', -apple-system, BlinkMacSystemFont, sans-serif;
+  background: var(--bg-0);
+  color: var(--fg-0);
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(circle at 20% 20%, rgba(99, 102, 241, 0.15) 0%, transparent 50%),
+    radial-gradient(circle at 80% 80%, rgba(244, 114, 182, 0.1) 0%, transparent 50%),
+    radial-gradient(circle at 50% 50%, rgba(6, 182, 212, 0.05) 0%, transparent 70%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  background: none;
+  color: inherit;
+  transition: all var(--transition);
+}
+
+input, textarea {
+  font-family: inherit;
+  outline: none;
+  border: none;
+  background: none;
+  color: inherit;
+}
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--bg-4); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--fg-3); }
+
+/* ═══════════════════════════════════════════════════════════════
+   APP CONTAINER
+   ═══════════════════════════════════════════════════════════════ */
+#app {
+  position: relative;
+  width: 100%;
+  max-width: 480px;
+  height: 100vh;
+  height: 100dvh;
+  max-height: 900px;
+  background: var(--bg-1);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  z-index: 1;
+}
+
+@media (min-width: 768px) {
+  #app {
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg), 0 0 0 1px var(--border);
+    height: 90vh;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   SCREENS
+   ═══════════════════════════════════════════════════════════════ */
+.screen {
+  display: none;
+  flex: 1;
+  flex-direction: column;
+  overflow: hidden;
+  animation: fadeIn 0.3s ease;
+}
+
+.screen.active { display: flex; }
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(30px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideIn {
+  from { opacity: 0; transform: translateX(-20px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   AUTH SCREEN
+   ═══════════════════════════════════════════════════════════════ */
+#auth-screen {
+  justify-content: center;
+  padding: 24px;
+  background:
+    radial-gradient(circle at 30% 20%, rgba(99, 102, 241, 0.2) 0%, transparent 60%),
+    radial-gradient(circle at 70% 80%, rgba(244, 114, 182, 0.15) 0%, transparent 60%);
+}
+
+.auth-logo {
+  text-align: center;
+  margin-bottom: 32px;
+  animation: slideUp 0.5s ease;
+}
+
+.auth-logo .emoji {
+  font-size: 64px;
+  display: block;
+  margin-bottom: 12px;
+  filter: drop-shadow(0 0 20px rgba(99, 102, 241, 0.6));
+  animation: bounce 2s ease-in-out infinite;
+}
+
+.auth-logo h1 {
+  font-size: 28px;
+  font-weight: 800;
+  background: linear-gradient(135deg, var(--primary-2), var(--vip));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  margin-bottom: 6px;
+}
+
+.auth-logo p {
+  color: var(--fg-2);
+  font-size: 14px;
+}
+
+.auth-card {
+  background: rgba(30, 41, 59, 0.6);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  box-shadow: var(--shadow);
+  animation: slideUp 0.5s ease 0.1s backwards;
+}
+
+.auth-tabs {
+  display: flex;
+  gap: 4px;
+  background: var(--bg-3);
+  padding: 4px;
+  border-radius: var(--radius);
+  margin-bottom: 20px;
+}
+
+.auth-tab {
+  flex: 1;
+  padding: 12px;
+  border-radius: 10px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--fg-2);
+  transition: all var(--transition);
+}
+
+.auth-tab.active {
+  background: var(--primary);
+  color: white;
+  box-shadow: var(--glow);
+}
+
+.auth-form {
+  display: none;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.auth-form.active { display: flex; }
+
+.input-group {
+  position: relative;
+}
+
+.input-group .icon {
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--fg-3);
+  font-size: 18px;
+  pointer-events: none;
+}
+
+.input-group input {
+  width: 100%;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  color: var(--fg-0);
+  padding: 14px 44px 14px 14px;
+  border-radius: 12px;
+  font-size: 15px;
+  transition: all var(--transition);
+}
+
+.input-group input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+}
+
+.input-group input::placeholder {
+  color: var(--fg-3);
+}
+
+.btn {
+  padding: 14px 20px;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 600;
+  transition: all var(--transition);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, var(--primary), var(--primary-3));
+  color: white;
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+}
+
+.btn-primary:hover {
+  box-shadow: 0 6px 20px rgba(99, 102, 241, 0.5);
+  transform: translateY(-1px);
+}
+
+.btn-primary:active { transform: translateY(0); }
+
+.btn-secondary {
+  background: var(--bg-3);
+  color: var(--fg-0);
+}
+
+.btn-secondary:hover { background: var(--bg-4); }
+
+.btn-danger {
+  background: linear-gradient(135deg, var(--danger), var(--danger-2));
+  color: white;
+}
+
+.btn-success {
+  background: linear-gradient(135deg, var(--success), var(--success-2));
+  color: white;
+}
+
+.btn-full { width: 100%; }
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
+.auth-error {
+  color: var(--danger);
+  font-size: 13px;
+  text-align: center;
+  min-height: 20px;
+  margin-top: 8px;
+}
+
+.auth-error:not(:empty) {
+  animation: slideIn 0.3s ease;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   TOPBAR
+   ═══════════════════════════════════════════════════════════════ */
+.topbar {
+  background: rgba(15, 23, 42, 0.95);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--border);
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+  z-index: 10;
+}
+
+.topbar-user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--primary), var(--vip));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: bold;
+  flex-shrink: 0;
+  box-shadow: var(--shadow-sm);
+}
+
+.topbar-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.topbar-name {
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 140px;
+}
+
+.topbar-coins {
+  font-size: 12px;
+  color: var(--gold);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.topbar-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.icon-btn {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: var(--bg-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  transition: all var(--transition);
+}
+
+.icon-btn:hover { background: var(--bg-3); }
+.icon-btn:active { transform: scale(0.95); }
+
+/* ═══════════════════════════════════════════════════════════════
+   MAIN CONTENT / VIEWS
+   ═══════════════════════════════════════════════════════════════ */
+.content {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative;
+}
+
+.view {
+  display: none;
+  padding: 20px 16px 100px;
+  animation: fadeIn 0.25s ease;
+}
+
+.view.active { display: block; }
+
+/* ═══════════════════════════════════════════════════════════════
+   HOME VIEW
+   ═══════════════════════════════════════════════════════════════ */
+.hero-card {
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.15), rgba(244, 114, 182, 0.1));
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  margin-bottom: 16px;
+  position: relative;
+  overflow: hidden;
+}
+
+.hero-card::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  right: -20%;
+  width: 200px;
+  height: 200px;
+  background: radial-gradient(circle, rgba(99, 102, 241, 0.3), transparent 70%);
+  filter: blur(40px);
+  pointer-events: none;
+}
+
+.hero-card h2 {
+  font-size: 20px;
+  margin-bottom: 8px;
+  position: relative;
+}
+
+.hero-card p {
+  color: var(--fg-2);
+  font-size: 14px;
+  margin-bottom: 20px;
+  position: relative;
+}
+
+.hero-card .btn {
+  position: relative;
+}
+
+.hero-badges {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+  flex-wrap: wrap;
+  position: relative;
+}
+
+.badge {
+  background: rgba(99, 102, 241, 0.15);
+  border: 1px solid rgba(99, 102, 241, 0.3);
+  color: var(--primary-2);
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.badge.gold {
+  background: rgba(251, 191, 36, 0.15);
+  border-color: rgba(251, 191, 36, 0.3);
+  color: var(--gold);
+}
+
+.section-title {
+  font-size: 16px;
+  font-weight: 700;
+  margin: 24px 0 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.section-title::before {
+  content: '';
+  width: 4px;
+  height: 18px;
+  background: linear-gradient(180deg, var(--primary), var(--vip));
+  border-radius: 2px;
+}
+
+.quick-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.quick-card {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px 12px;
+  text-align: center;
+  transition: all var(--transition);
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+}
+
+.quick-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, transparent, rgba(99, 102, 241, 0.1));
+  opacity: 0;
+  transition: opacity var(--transition);
+}
+
+.quick-card:hover {
+  border-color: var(--primary);
+  transform: translateY(-3px);
+  box-shadow: var(--shadow);
+}
+
+.quick-card:hover::before { opacity: 1; }
+.quick-card:active { transform: translateY(-1px); }
+
+.quick-icon {
+  font-size: 32px;
+  margin-bottom: 8px;
+  display: block;
+  position: relative;
+}
+
+.quick-label {
+  font-size: 13px;
+  color: var(--fg-1);
+  font-weight: 500;
+  position: relative;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   QUEUE VIEW
+   ═══════════════════════════════════════════════════════════════ */
+#queue-view {
+  display: none;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 24px;
+  text-align: center;
+}
+
+#queue-view.active { display: flex; }
+
+.queue-animation {
+  position: relative;
+  width: 120px;
+  height: 120px;
+  margin-bottom: 32px;
+}
+
+.queue-ring {
+  position: absolute;
+  inset: 0;
+  border: 3px solid transparent;
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin 1.5s linear infinite;
+}
+
+.queue-ring:nth-child(2) {
+  inset: 12px;
+  border-top-color: var(--vip);
+  animation-duration: 2s;
+  animation-direction: reverse;
+}
+
+.queue-ring:nth-child(3) {
+  inset: 24px;
+  border-top-color: var(--info);
+  animation-duration: 2.5s;
+}
+
+.queue-center {
+  position: absolute;
+  inset: 36px;
+  background: var(--bg-2);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+}
+
+#queue-view h2 {
+  font-size: 20px;
+  margin-bottom: 8px;
+}
+
+#queue-view p {
+  color: var(--fg-2);
+  font-size: 14px;
+  margin-bottom: 32px;
+}
+
+.queue-timer {
+  font-size: 28px;
+  font-weight: 800;
+  color: var(--primary-2);
+  margin-bottom: 32px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   CHAT VIEW
+   ═══════════════════════════════════════════════════════════════ */
+#chat-view {
+  display: none;
+  flex: 1;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+#chat-view.active { display: flex; }
+
+.chat-header {
+  background: rgba(30, 41, 59, 0.95);
+  backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--border);
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+
+.chat-partner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.chat-partner-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.chat-partner-name {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.chat-partner-status {
+  font-size: 12px;
+  color: var(--success);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--success);
+  animation: pulse 2s ease-in-out infinite;
+}
+
+.chat-header-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  scroll-behavior: smooth;
+}
+
+.message {
+  max-width: 78%;
+  padding: 10px 14px;
+  border-radius: 16px;
+  font-size: 14px;
+  line-height: 1.5;
+  word-break: break-word;
+  animation: slideUp 0.2s ease;
+  position: relative;
+}
+
+.message.them {
+  background: var(--bg-2);
+  align-self: flex-start;
+  border-bottom-right-radius: 4px;
+}
+
+.message.me {
+  background: linear-gradient(135deg, var(--primary), var(--primary-3));
+  align-self: flex-end;
+  border-bottom-left-radius: 4px;
+  color: white;
+}
+
+.message-meta {
+  font-size: 11px;
+  opacity: 0.7;
+  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.message-time {
+  font-size: 10px;
+  opacity: 0.6;
+  margin-top: 4px;
+  text-align: left;
+}
+
+.message.me .message-time { text-align: right; }
+
+.system-message {
+  align-self: center;
+  background: rgba(99, 102, 241, 0.1);
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  color: var(--fg-2);
+  font-size: 12px;
+  padding: 6px 14px;
+  border-radius: 20px;
+  margin: 8px 0;
+  text-align: center;
+  max-width: 90%;
+}
+
+.typing-indicator {
+  align-self: flex-start;
+  background: var(--bg-2);
+  padding: 12px 16px;
+  border-radius: 16px;
+  border-bottom-right-radius: 4px;
+  display: flex;
+  gap: 4px;
+  animation: slideUp 0.2s ease;
+}
+
+.typing-indicator span {
+  width: 8px;
+  height: 8px;
+  background: var(--fg-3);
+  border-radius: 50%;
+  animation: bounce 1.4s ease-in-out infinite;
+}
+
+.typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
+.typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
+
+.chat-input-area {
+  background: var(--bg-2);
+  border-top: 1px solid var(--border);
+  padding: 10px 12px;
+  flex-shrink: 0;
+}
+
+.chat-input-form {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.chat-input-form input {
+  flex: 1;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  padding: 12px 16px;
+  border-radius: 24px;
+  font-size: 14px;
+  color: var(--fg-0);
+  transition: all var(--transition);
+}
+
+.chat-input-form input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+.send-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--primary), var(--primary-3));
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+}
+
+.send-btn:hover { transform: scale(1.05); }
+.send-btn:active { transform: scale(0.95); }
+
+/* ═══════════════════════════════════════════════════════════════
+   PROFILE VIEW
+   ═══════════════════════════════════════════════════════════════ */
+.profile-header {
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(244, 114, 182, 0.15));
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  text-align: center;
+  margin-bottom: 16px;
+  position: relative;
+  overflow: hidden;
+}
+
+.profile-header::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 200px;
+  height: 200px;
+  background: radial-gradient(circle, rgba(99, 102, 241, 0.4), transparent 70%);
+  filter: blur(50px);
+  pointer-events: none;
+}
+
+.profile-avatar-lg {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--primary), var(--vip));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 36px;
+  font-weight: bold;
+  margin: 0 auto 12px;
+  position: relative;
+  box-shadow: 0 0 30px rgba(99, 102, 241, 0.5);
+}
+
+.profile-name {
+  font-size: 20px;
+  font-weight: 700;
+  margin-bottom: 4px;
+  position: relative;
+}
+
+.profile-code {
+  font-size: 13px;
+  color: var(--fg-2);
+  font-family: 'Courier New', monospace;
+  position: relative;
+}
+
+.profile-rank {
+  display: inline-block;
+  margin-top: 12px;
+  padding: 6px 16px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 600;
+  background: rgba(251, 191, 36, 0.15);
+  border: 1px solid rgba(251, 191, 36, 0.3);
+  color: var(--gold);
+  position: relative;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.stat-card {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  text-align: center;
+  transition: all var(--transition);
+}
+
+.stat-card:hover {
+  border-color: var(--border-strong);
+  transform: translateY(-2px);
+}
+
+.stat-icon {
+  font-size: 22px;
+  margin-bottom: 6px;
+  display: block;
+}
+
+.stat-value {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--fg-0);
+  margin-bottom: 2px;
+}
+
+.stat-label {
+  font-size: 12px;
+  color: var(--fg-2);
+}
+
+.progress-section {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 12px;
+}
+
+.progress-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  font-size: 13px;
+}
+
+.progress-header .label { color: var(--fg-2); }
+.progress-header .value { color: var(--primary-2); font-weight: 600; }
+
+.progress-bar {
+  height: 8px;
+  background: var(--bg-3);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--primary), var(--vip));
+  border-radius: 4px;
+  transition: width 0.5s ease;
+  box-shadow: 0 0 10px rgba(99, 102, 241, 0.5);
+}
+
+.settings-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.setting-item {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  transition: all var(--transition);
+}
+
+.setting-item:hover { border-color: var(--border-strong); }
+
+.setting-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.setting-icon {
+  font-size: 20px;
+}
+
+.setting-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.setting-title {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.setting-desc {
+  font-size: 12px;
+  color: var(--fg-2);
+}
+
+.toggle {
+  position: relative;
+  width: 48px;
+  height: 26px;
+  background: var(--bg-4);
+  border-radius: 13px;
+  cursor: pointer;
+  transition: background var(--transition);
+}
+
+.toggle.active { background: var(--primary); }
+
+.toggle::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 20px;
+  height: 20px;
+  background: white;
+  border-radius: 50%;
+  transition: transform var(--transition);
+}
+
+.toggle.active::after { transform: translateX(-22px); }
+
+/* ═══════════════════════════════════════════════════════════════
+   SHOP VIEW
+   ═══════════════════════════════════════════════════════════════ */
+.shop-balance {
+  background: linear-gradient(135deg, rgba(251, 191, 36, 0.15), rgba(245, 158, 11, 0.1));
+  border: 1px solid rgba(251, 191, 36, 0.3);
+  border-radius: var(--radius);
+  padding: 16px 20px;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.shop-balance-label {
+  font-size: 13px;
+  color: var(--fg-2);
+}
+
+.shop-balance-value {
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--gold);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.rank-card {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  transition: all var(--transition);
+}
+
+.rank-card:hover {
+  border-color: var(--border-strong);
+  transform: translateX(-2px);
+}
+
+.rank-icon-lg {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 26px;
+  flex-shrink: 0;
+}
+
+.rank-icon-lg.silver { background: linear-gradient(135deg, rgba(203, 213, 225, 0.2), rgba(203, 213, 225, 0.05)); }
+.rank-icon-lg.gold { background: linear-gradient(135deg, rgba(251, 191, 36, 0.2), rgba(251, 191, 36, 0.05)); }
+.rank-icon-lg.diamond { background: linear-gradient(135deg, rgba(103, 232, 249, 0.2), rgba(103, 232, 249, 0.05)); }
+.rank-icon-lg.vip { background: linear-gradient(135deg, rgba(244, 114, 182, 0.2), rgba(244, 114, 182, 0.05)); }
+
+.rank-info { flex: 1; min-width: 0; }
+
+.rank-name {
+  font-size: 15px;
+  font-weight: 700;
+  margin-bottom: 2px;
+}
+
+.rank-desc {
+  font-size: 12px;
+  color: var(--fg-2);
+}
+
+.rank-price {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--gold);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.buy-btn {
+  background: var(--primary);
+  color: white;
+  padding: 8px 16px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.buy-btn:hover { background: var(--primary-2); }
+.buy-btn:disabled {
+  background: var(--bg-4);
+  color: var(--fg-3);
+  cursor: not-allowed;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   GAMES VIEW
+   ═══════════════════════════════════════════════════════════════ */
+.game-card {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  margin-bottom: 16px;
+  text-align: center;
+}
+
+.game-icon {
+  font-size: 56px;
+  margin-bottom: 12px;
+  display: block;
+}
+
+.game-title {
+  font-size: 18px;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.game-desc {
+  font-size: 13px;
+  color: var(--fg-2);
+  margin-bottom: 20px;
+}
+
+.guess-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.guess-btn {
+  aspect-ratio: 1;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--fg-0);
+  transition: all var(--transition);
+}
+
+.guess-btn:hover {
+  border-color: var(--primary);
+  background: var(--bg-4);
+  transform: translateY(-2px);
+}
+
+.guess-btn.correct {
+  background: var(--success);
+  border-color: var(--success);
+  color: white;
+  animation: bounce 0.5s ease;
+}
+
+.guess-btn.wrong {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: white;
+}
+
+.game-result {
+  min-height: 40px;
+  padding: 12px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: all var(--transition);
+}
+
+.game-result.success {
+  background: rgba(34, 197, 94, 0.15);
+  color: var(--success);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+}
+
+.game-result.error {
+  background: rgba(239, 68, 68, 0.15);
+  color: var(--danger);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.coin-game {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.coin-btn {
+  flex: 1;
+  background: var(--bg-3);
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  padding: 24px 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  transition: all var(--transition);
+}
+
+.coin-btn:hover {
+  border-color: var(--primary);
+  transform: translateY(-3px);
+  box-shadow: var(--shadow);
+}
+
+.coin-btn:active { transform: translateY(0); }
+
+.coin-btn .emoji { font-size: 40px; }
+.coin-btn .label { font-size: 14px; font-weight: 600; }
+
+.coin-result {
+  font-size: 48px;
+  text-align: center;
+  min-height: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: slideUp 0.3s ease;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   DAILY REWARD MODAL
+   ═══════════════════════════════════════════════════════════════ */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  z-index: 100;
+  animation: fadeIn 0.2s ease;
+}
+
+.modal-overlay.active { display: flex; }
+
+.modal {
+  background: var(--bg-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  padding: 32px 24px;
+  max-width: 360px;
+  width: 100%;
+  text-align: center;
+  box-shadow: var(--shadow-lg);
+  animation: slideUp 0.3s ease;
+}
+
+.modal-emoji {
+  font-size: 72px;
+  margin-bottom: 16px;
+  display: block;
+  animation: bounce 1s ease infinite;
+}
+
+.modal-title {
+  font-size: 22px;
+  font-weight: 800;
+  margin-bottom: 8px;
+}
+
+.modal-text {
+  color: var(--fg-2);
+  font-size: 14px;
+  margin-bottom: 20px;
+}
+
+.modal-reward {
+  background: rgba(251, 191, 36, 0.15);
+  border: 1px solid rgba(251, 191, 36, 0.3);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 20px;
+}
+
+.modal-reward-value {
+  font-size: 32px;
+  font-weight: 800;
+  color: var(--gold);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.modal-reward-label {
+  font-size: 12px;
+  color: var(--fg-2);
+  margin-top: 4px;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   TOAST
+   ═══════════════════════════════════════════════════════════════ */
+.toast-container {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 200;
+  pointer-events: none;
+  width: calc(100% - 40px);
+  max-width: 400px;
+}
+
+.toast {
+  background: var(--bg-2);
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  padding: 14px 18px;
+  font-size: 14px;
+  font-weight: 500;
+  box-shadow: var(--shadow);
+  animation: slideUp 0.3s ease;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  pointer-events: auto;
+}
+
+.toast.success {
+  border-color: rgba(34, 197, 94, 0.4);
+  background: rgba(34, 197, 94, 0.15);
+}
+
+.toast.error {
+  border-color: rgba(239, 68, 68, 0.4);
+  background: rgba(239, 68, 68, 0.15);
+}
+
+.toast.info {
+  border-color: rgba(6, 182, 212, 0.4);
+  background: rgba(6, 182, 212, 0.15);
+}
+
+.toast.leaving {
+  animation: slideUp 0.3s ease reverse forwards;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   BOTTOM NAV
+   ═══════════════════════════════════════════════════════════════ */
+.bottom-nav {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: rgba(15, 23, 42, 0.98);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-top: 1px solid var(--border);
+  display: flex;
+  padding: 8px 4px;
+  z-index: 10;
+}
+
+.nav-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 4px;
+  border-radius: 10px;
+  color: var(--fg-3);
+  font-size: 11px;
+  transition: all var(--transition);
+}
+
+.nav-btn .nav-icon {
+  font-size: 20px;
+  transition: transform var(--transition);
+}
+
+.nav-btn.active {
+  color: var(--primary-2);
+}
+
+.nav-btn.active .nav-icon {
+  transform: scale(1.1);
+}
+
+.nav-btn:active .nav-icon {
+  transform: scale(0.9);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   RESPONSIVE
+   ═══════════════════════════════════════════════════════════════ */
+@media (max-width: 380px) {
+  .auth-logo h1 { font-size: 24px; }
+  .auth-logo .emoji { font-size: 52px; }
+  .quick-card { padding: 16px 8px; }
+  .quick-icon { font-size: 28px; }
+  .stat-value { font-size: 18px; }
+}
+
+@media (max-height: 600px) {
+  .profile-avatar-lg { width: 60px; height: 60px; font-size: 28px; }
+  .modal-emoji { font-size: 56px; }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   UTILITIES
+   ═══════════════════════════════════════════════════════════════ */
+.hidden { display: none !important; }
+
+.text-center { text-align: center; }
+
+.mt-16 { margin-top: 16px; }
+.mb-16 { margin-bottom: 16px; }
+
+.back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--fg-2);
+  font-size: 14px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+
+.back-btn:hover {
+  background: var(--bg-2);
+  color: var(--fg-0);
+}
+
+.empty-state {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--fg-3);
+}
+
+.empty-state .emoji {
+  font-size: 48px;
+  display: block;
+  margin-bottom: 12px;
+  opacity: 0.5;
+}
+
+.empty-state p {
+  font-size: 14px;
+}
+</style>
 </head>
 <body>
-  <!-- صفحه ورود/ثبت‌نام -->
+
+<div id="app">
+
+  <!-- ═══════════ AUTH SCREEN ═══════════ -->
   <div id="auth-screen" class="screen active">
-    <div class="auth-box">
-      <h1>🕵️ چت ناشناس</h1>
-      <p class="subtitle">با آدم‌های جدید آشنا شو، ناشناس</p>
+    <div class="auth-logo">
+      <span class="emoji">🕵️</span>
+      <h1>چت ناشناس</h1>
+      <p>با آدم‌های جدید آشنا شو، ناشناس</p>
+    </div>
 
-      <div class="tabs">
-        <button class="tab active" data-tab="login">ورود</button>
-        <button class="tab" data-tab="register">ثبت‌نام</button>
+    <div class="auth-card">
+      <div class="auth-tabs">
+        <button class="auth-tab active" data-tab="login">ورود</button>
+        <button class="auth-tab" data-tab="register">ثبت‌نام</button>
       </div>
 
-      <form id="login-form" class="form active">
-        <input type="text" id="login-username" placeholder="یوزرنیم" required />
-        <input type="password" id="login-password" placeholder="رمز" required />
-        <button type="submit">ورود</button>
+      <form id="login-form" class="auth-form active">
+        <div class="input-group">
+          <span class="icon">👤</span>
+          <input type="text" id="login-username" placeholder="یوزرنیم" required autocomplete="username" />
+        </div>
+        <div class="input-group">
+          <span class="icon">🔒</span>
+          <input type="password" id="login-password" placeholder="رمز عبور" required autocomplete="current-password" />
+        </div>
+        <button type="submit" class="btn btn-primary btn-full">ورود</button>
       </form>
 
-      <form id="register-form" class="form">
-        <input type="text" id="reg-username" placeholder="یوزرنیم (انگلیسی)" required />
-        <input type="text" id="reg-display" placeholder="نام نمایشی" required />
-        <input type="password" id="reg-password" placeholder="رمز (حداقل ۴ کاراکتر)" required />
-        <button type="submit">ثبت‌نام</button>
+      <form id="register-form" class="auth-form">
+        <div class="input-group">
+          <span class="icon">👤</span>
+          <input type="text" id="reg-username" placeholder="یوزرنیم (انگلیسی)" required autocomplete="username" />
+        </div>
+        <div class="input-group">
+          <span class="icon">✨</span>
+          <input type="text" id="reg-display" placeholder="نام نمایشی" required />
+        </div>
+        <div class="input-group">
+          <span class="icon">🔒</span>
+          <input type="password" id="reg-password" placeholder="رمز (حداقل ۴ کاراکتر)" required autocomplete="new-password" />
+        </div>
+        <button type="submit" class="btn btn-primary btn-full">ثبت‌نام</button>
       </form>
 
-      <div id="auth-error" class="error"></div>
+      <div id="auth-error" class="auth-error"></div>
     </div>
   </div>
 
-  <!-- اپ اصلی -->
+  <!-- ═══════════ MAIN APP SCREEN ═══════════ -->
   <div id="app-screen" class="screen">
-    <header class="topbar">
-      <div class="user-info">
-        <span id="top-name"></span>
-        <span id="top-coins">🪙 0</span>
-      </div>
-      <div class="actions">
-        <button id="btn-profile" title="پروفایل">👤</button>
-        <button id="btn-logout" title="خروج">🚪</button>
-      </div>
-    </header>
 
-    <!-- هوم -->
-    <div id="home-view" class="view active">
-      <div class="card">
-        <h2>شروع چت ناشناس</h2>
-        <p>با یک کلیک به یک غریبه وصل شو</p>
-        <button id="btn-start-chat" class="primary">💬 شروع چت</button>
+    <!-- Topbar -->
+    <div class="topbar">
+      <div class="topbar-user">
+        <div class="avatar" id="top-avatar">🕵️</div>
+        <div class="topbar-info">
+          <div class="topbar-name" id="top-name">کاربر</div>
+          <div class="topbar-coins">🪙 <span id="top-coins">0</span></div>
+        </div>
       </div>
-
-      <div class="grid">
-        <div class="mini-card" id="go-daily">
-          <div>🎁</div>
-          <div>جایزه روزانه</div>
-        </div>
-        <div class="mini-card" id="go-shop">
-          <div>🏆</div>
-          <div>رنک‌ها</div>
-        </div>
-        <div class="mini-card" id="go-game">
-          <div>🎮</div>
-          <div>بازی</div>
-        </div>
-        <div class="mini-card" id="go-profile">
-          <div>👤</div>
-          <div>پروفایل</div>
-        </div>
+      <div class="topbar-actions">
+        <button class="icon-btn" id="btn-notifications" title="اعلان‌ها">🔔</button>
       </div>
     </div>
 
-    <!-- صف انتظار -->
-    <div id="queue-view" class="view">
-      <div class="center-box">
-        <div class="spinner"></div>
-        <h2>در حال پیدا کردن مخاطب...</h2>
-        <p>لطفاً صبر کن</p>
-        <button id="btn-cancel-queue" class="secondary">لغو</button>
-      </div>
-    </div>
+    <!-- Content -->
+    <div class="content">
 
-    <!-- چت -->
-    <div id="chat-view" class="view">
-      <div class="chat-header">
-        <div id="chat-partner-name"></div>
-        <button id="btn-end-chat" class="danger">پایان چت</button>
-      </div>
-      <div id="messages" class="messages"></div>
-      <form id="message-form" class="message-form">
-        <input type="text" id="message-input" placeholder="پیام..." autocomplete="off" />
-        <button type="submit">➤</button>
-      </form>
-    </div>
-
-    <!-- پروفایل -->
-    <div id="profile-view" class="view">
-      <div class="card">
-        <h2 id="prof-name"></h2>
-        <div class="prof-grid">
-          <div><span>کد:</span> <code id="prof-code"></code></div>
-          <div><span>سطح:</span> <b id="prof-level"></b></div>
-          <div><span>XP:</span> <b id="prof-xp"></b></div>
-          <div><span>سکه:</span> <b id="prof-coins"></b></div>
-          <div><span>رنک:</span> <b id="prof-rank"></b></div>
-          <div><span>چت‌ها:</span> <b id="prof-chats"></b></div>
-          <div><span>پیام‌ها:</span> <b id="prof-messages"></b></div>
-          <div><span>استریک:</span> <b id="prof-streak"></b></div>
+      <!-- ═══ HOME ═══ -->
+      <div id="home-view" class="view active">
+        <div class="hero-card">
+          <h2>💬 چت ناشناس</h2>
+          <p>با یک کلیک به یک غریبه وصل شو</p>
+          <button class="btn btn-primary btn-full" id="btn-start-chat">🚀 شروع چت</button>
+          <div class="hero-badges">
+            <span class="badge">🕵️ ناشناس</span>
+            <span class="badge">⚡ سریع</span>
+            <span class="badge gold" id="hero-level">🏆 سطح ۱</span>
+          </div>
         </div>
-        <button id="btn-back-home" class="secondary">بازگشت</button>
-      </div>
-    </div>
 
-    <!-- فروشگاه -->
-    <div id="shop-view" class="view">
-      <div class="card">
-        <h2>🏆 فروشگاه رنک</h2>
+        <div class="section-title">دسترسی سریع</div>
+        <div class="quick-grid">
+          <div class="quick-card" data-go="profile">
+            <span class="quick-icon">👤</span>
+            <div class="quick-label">پروفایل</div>
+          </div>
+          <div class="quick-card" data-go="shop">
+            <span class="quick-icon">🏆</span>
+            <div class="quick-label">فروشگاه رنک</div>
+          </div>
+          <div class="quick-card" data-go="games">
+            <span class="quick-icon">🎮</span>
+            <div class="quick-label">بازی</div>
+          </div>
+          <div class="quick-card" data-go="daily">
+            <span class="quick-icon">🎁</span>
+            <div class="quick-label">جایزه روزانه</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══ QUEUE ═══ -->
+      <div id="queue-view" class="view">
+        <div style="text-align:center; padding: 40px 20px;">
+          <div class="queue-animation">
+            <div class="queue-ring"></div>
+            <div class="queue-ring"></div>
+            <div class="queue-ring"></div>
+            <div class="queue-center">🔎</div>
+          </div>
+          <h2>در حال پیدا کردن مخاطب...</h2>
+          <p>به محض پیدا شدن، چت شروع می‌شود</p>
+          <div class="queue-timer" id="queue-timer">00:00</div>
+          <button class="btn btn-secondary btn-full" id="btn-cancel-queue">لغو صف</button>
+        </div>
+      </div>
+
+      <!-- ═══ CHAT ═══ -->
+      <div id="chat-view" class="view">
+        <div class="chat-header">
+          <div class="chat-partner">
+            <div class="avatar" id="chat-partner-avatar" style="width:36px;height:36px;font-size:16px;">🕵️</div>
+            <div class="chat-partner-info">
+              <div class="chat-partner-name" id="chat-partner-name">مخاطب ناشناس</div>
+              <div class="chat-partner-status"><span class="status-dot"></span>آنلاین</div>
+            </div>
+          </div>
+          <div class="chat-header-actions">
+            <button class="icon-btn" id="btn-report" title="گزارش">🚨</button>
+            <button class="icon-btn" id="btn-end-chat" title="پایان چت">🚪</button>
+          </div>
+        </div>
+
+        <div class="chat-messages" id="chat-messages"></div>
+
+        <div class="chat-input-area">
+          <form class="chat-input-form" id="chat-form">
+            <input type="text" id="chat-input" placeholder="پیام خود را بنویسید..." autocomplete="off" />
+            <button type="submit" class="send-btn">➤</button>
+          </form>
+        </div>
+      </div>
+
+      <!-- ═══ PROFILE ═══ -->
+      <div id="profile-view" class="view">
+        <div class="profile-header">
+          <div class="profile-avatar-lg" id="profile-avatar">🕵️</div>
+          <div class="profile-name" id="profile-name">کاربر</div>
+          <div class="profile-code" id="profile-code">#0001</div>
+          <div class="profile-rank" id="profile-rank">ممبر</div>
+        </div>
+
+        <div class="progress-section">
+          <div class="progress-header">
+            <span class="label">سطح <b id="profile-level">۱</b></span>
+            <span class="value" id="profile-xp-text">0/100 XP</span>
+          </div>
+          <div class="progress-bar">
+            <div class="progress-fill" id="profile-xp-bar" style="width: 0%"></div>
+          </div>
+        </div>
+
+        <div class="stats-grid">
+          <div class="stat-card">
+            <span class="stat-icon">🪙</span>
+            <div class="stat-value" id="stat-coins">0</div>
+            <div class="stat-label">سکه</div>
+          </div>
+          <div class="stat-card">
+            <span class="stat-icon">💬</span>
+            <div class="stat-value" id="stat-chats">0</div>
+            <div class="stat-label">چت‌ها</div>
+          </div>
+          <div class="stat-card">
+            <span class="stat-icon">📨</span>
+            <div class="stat-value" id="stat-messages">0</div>
+            <div class="stat-label">پیام‌ها</div>
+          </div>
+          <div class="stat-card">
+            <span class="stat-icon">🔥</span>
+            <div class="stat-value" id="stat-streak">0</div>
+            <div class="stat-label">استریک</div>
+          </div>
+        </div>
+
+        <div class="section-title">تنظیمات</div>
+        <div class="settings-list">
+          <div class="setting-item">
+            <div class="setting-info">
+              <span class="setting-icon">🕵️</span>
+              <div class="setting-text">
+                <div class="setting-title">حالت ناشناس</div>
+                <div class="setting-desc">هویت شما نمایش داده نمی‌شود</div>
+              </div>
+            </div>
+            <div class="toggle active" id="toggle-anon"></div>
+          </div>
+          <div class="setting-item">
+            <div class="setting-info">
+              <span class="setting-icon">🔔</span>
+              <div class="setting-text">
+                <div class="setting-title">اعلان‌ها</div>
+                <div class="setting-desc">دریافت اعلان‌های جدید</div>
+              </div>
+            </div>
+            <div class="toggle active" id="toggle-notif"></div>
+          </div>
+          <div class="setting-item">
+            <div class="setting-info">
+              <span class="setting-icon">🚪</span>
+              <div class="setting-text">
+                <div class="setting-title">خروج از حساب</div>
+                <div class="setting-desc">از حساب کاربری خارج شوید</div>
+              </div>
+            </div>
+            <button class="btn btn-danger" id="btn-logout" style="padding: 8px 16px; font-size: 13px;">خروج</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══ SHOP ═══ -->
+      <div id="shop-view" class="view">
+        <button class="back-btn" data-back="home">→ بازگشت</button>
+
+        <div class="shop-balance">
+          <span class="shop-balance-label">موجودی شما</span>
+          <span class="shop-balance-value">🪙 <span id="shop-balance">0</span></span>
+        </div>
+
+        <div class="section-title">رنک‌های قابل خرید</div>
         <div id="shop-list"></div>
-        <button id="btn-back-home-2" class="secondary">بازگشت</button>
       </div>
+
+      <!-- ═══ GAMES ═══ -->
+      <div id="games-view" class="view">
+        <button class="back-btn" data-back="home">→ بازگشت</button>
+
+        <div class="game-card">
+          <span class="game-icon">🎲</span>
+          <div class="game-title">حدس عدد</div>
+          <div class="game-desc">یک عدد بین ۱ تا ۵ انتخاب کن. اگر درست حدس بزنی ۱۰۰ سکه می‌گیری!</div>
+          <div class="guess-grid" id="guess-grid">
+            <button class="guess-btn" data-n="1">1</button>
+            <button class="guess-btn" data-n="2">2</button>
+            <button class="guess-btn" data-n="3">3</button>
+            <button class="guess-btn" data-n="4">4</button>
+            <button class="guess-btn" data-n="5">5</button>
+          </div>
+          <div class="game-result" id="guess-result"></div>
+        </div>
+
+        <div class="game-card">
+          <span class="game-icon">🪙</span>
+          <div class="game-title">شیر یا خط</div>
+          <div class="game-desc">یک انتخاب کن و شانست رو امتحان کن</div>
+          <div class="coin-game">
+            <button class="coin-btn" data-coin="شیر">
+              <span class="emoji">🦁</span>
+              <span class="label">شیر</span>
+            </button>
+            <button class="coin-btn" data-coin="خط">
+              <span class="emoji">✖️</span>
+              <span class="label">خط</span>
+            </button>
+          </div>
+          <div class="coin-result" id="coin-result"></div>
+          <div class="game-result" id="coin-game-result"></div>
+        </div>
+      </div>
+
     </div>
 
-    <!-- بازی -->
-    <div id="game-view" class="view">
-      <div class="card">
-        <h2>🎮 بازی</h2>
-        <p>عدد بین ۱ تا ۵ حدس بزن</p>
-        <div class="guess-buttons" id="guess-buttons">
-          <button data-n="1">1</button>
-          <button data-n="2">2</button>
-          <button data-n="3">3</button>
-          <button data-n="4">4</button>
-          <button data-n="5">5</button>
-        </div>
-        <div id="game-result"></div>
-        <button id="btn-back-home-3" class="secondary">بازگشت</button>
-      </div>
+    <!-- Bottom Navigation -->
+    <div class="bottom-nav">
+      <button class="nav-btn active" data-nav="home">
+        <span class="nav-icon">🏠</span>
+        <span>خانه</span>
+      </button>
+      <button class="nav-btn" data-nav="shop">
+        <span class="nav-icon">🛒</span>
+        <span>فروشگاه</span>
+      </button>
+      <button class="nav-btn" data-nav="games">
+        <span class="nav-icon">🎮</span>
+        <span>بازی</span>
+      </button>
+      <button class="nav-btn" data-nav="profile">
+        <span class="nav-icon">👤</span>
+        <span>پروفایل</span>
+      </button>
     </div>
+
   </div>
 
-  <div id="toast" class="toast"></div>
+  <!-- ═══════════ MODAL ═══════════ -->
+  <div class="modal-overlay" id="modal">
+    <div class="modal" id="modal-content"></div>
+  </div>
 
-  <script src="/socket.io/socket.io.js"></script>
-  <script src="app.js"></script>
+  <!-- ═══════════ TOASTS ═══════════ -->
+  <div class="toast-container" id="toast-container"></div>
+
+</div>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════
+   CONFIG & CONSTANTS
+   ═══════════════════════════════════════════════════════════════ */
+const CONFIG = {
+  STORAGE_PREFIX: 'anonchat_',
+  WELCOME_COINS: 100,
+  XP_PER_LEVEL: 100,
+  DAILY_BASE: 50,
+  DAILY_BONUS_PER_STREAK: 10,
+  CHAT_XP: 10,
+  MESSAGE_XP: 1,
+  ONLINE_TIMEOUT: 15 * 60 * 1000,
+};
+
+const RANKS = {
+  member: { key: 'member', name: 'ممبر', icon: '👤', price: 0, days: 0, priority: 0, css: '' },
+  silver: { key: 'silver', name: '🥈 سیلور', icon: '🥈', price: 500, days: 30, priority: 10, css: 'silver' },
+  gold: { key: 'gold', name: '🥇 گلد', icon: '🥇', price: 1600, days: 30, priority: 20, css: 'gold' },
+  diamond: { key: 'diamond', name: '💎 دایموند', icon: '💎', price: 3500, days: 30, priority: 30, css: 'diamond' },
+  vip: { key: 'vip', name: '👑 VIP', icon: '👑', price: 7000, days: 30, priority: 40, css: 'vip' },
+};
+
+// پیام‌های شبیه‌سازی مخاطب
+const BOT_NAMES = [
+  'سارا', 'علی', 'مریم', 'رضا', 'نگار', 'امیر', 'الهام', 'حسین',
+  'فاطمه', 'محمد', 'زهرا', 'آرش', 'نازنین', 'پارسا', 'شیرین', 'کیان'
+];
+
+const BOT_GREETINGS = [
+  'سلام! خوبی؟ 👋',
+  'سلام، چطوری؟ 😊',
+  'هی! چخبر؟',
+  'سلام. چه خبر؟',
+  'درود! خوبی؟',
+  'سلام رفیق ✌️',
+  'سلام، وقتت بخیر',
+  'هی! خوشحالم که وصل شدیم',
+];
+
+const BOT_RESPONSES = [
+  'آره، منم همینطور 😊',
+  'جالب! بیشتر بگو',
+  'واقعاً؟ 😮',
+  'هاها، باحاله 😄',
+  'منم موافقم',
+  'آره دقیقاً',
+  'هوم، نمی‌دونستم',
+  'چه جالب!',
+  'دقیقاً همینه',
+  'حرفت درسته',
+  'اوه، جدی؟',
+  'خب، چی کار می‌کنی؟',
+  'از چی خوشت میاد؟',
+  'اهل کتابی؟',
+  'فیلم دوست داری؟',
+  'منم همینطور فکر می‌کنم',
+  'خب بگو ببینم',
+  'چه خبر جدید؟',
+  'روزت چطور بود؟',
+  'باحال! ادامه بده',
+  'وااای 😍',
+  'خب؟',
+  'آره دیگه 😅',
+  'منم همینطور',
+  'نظرت چیه؟',
+  'موافقم',
+  'هومم',
+  'چه باحال',
+  'مرسی که گفتی',
+  'اوکی 👌',
+];
+
+const BOT_QUESTIONS = [
+  'تو اهل کجایی؟',
+  'چند سالته؟',
+  'چه سبکی موسیقی گوش می‌دی؟',
+  'فیلم مورد علاقه‌ات چیه؟',
+  'وقت آزادت چیکار می‌کنی؟',
+  'ورزش هم می‌کنی؟',
+  'کتاب می‌خونی؟',
+  'حیوون خونگی داری؟',
+  'سفر رفتی؟',
+  'غذای مورد علاقه‌ات چیه؟',
+];
+
+/* ═══════════════════════════════════════════════════════════════
+   STATE
+   ═══════════════════════════════════════════════════════════════ */
+let state = {
+  currentUser: null,
+  currentView: 'home',
+  queueInterval: null,
+  queueStartTime: 0,
+  currentPartner: null,
+  typingTimeout: null,
+  botState: { messageCount: 0, lastMessageTime: 0 },
+  spamCount: 0,
+  lastMessageTime: 0,
+};
+
+/* ═══════════════════════════════════════════════════════════════
+   STORAGE
+   ═══════════════════════════════════════════════════════════════ */
+const Storage = {
+  get(key) {
+    try {
+      const val = localStorage.getItem(CONFIG.STORAGE_PREFIX + key);
+      return val ? JSON.parse(val) : null;
+    } catch {
+      return null;
+    }
+  },
+  set(key, value) {
+    try {
+      localStorage.setItem(CONFIG.STORAGE_PREFIX + key, JSON.stringify(value));
+    } catch (e) {
+      console.error('Storage error:', e);
+    }
+  },
+  remove(key) {
+    localStorage.removeItem(CONFIG.STORAGE_PREFIX + key);
+  }
+};
+
+/* ═══════════════════════════════════════════════════════════════
+   UTILS
+   ═══════════════════════════════════════════════════════════════ */
+function $(id) { return document.getElementById(id); }
+function $$(sel) { return document.querySelectorAll(sel); }
+
+function now() { return Date.now(); }
+
+function today() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function daysAgo(n) {
+  return new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
+}
+
+function formatNumber(n) {
+  return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+}
+
+function formatTime(ts) {
+  const d = new Date(ts);
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
+function formatTimer(seconds) {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
+
+function randomChoice(arr) {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
+function randomInt(min, max) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+function generateCode() {
+  const users = Storage.get('users') || {};
+  const used = new Set(Object.values(users).map(u => u.code));
+  for (let i = 1; i < 100000; i++) {
+    const code = String(i).padStart(4, '0');
+    if (!used.has(code)) return code;
+  }
+  return null;
+}
+
+function xpNeeded(level) {
+  return level * CONFIG.XP_PER_LEVEL;
+}
+
+function hashPassword(pass) {
+  // هش ساده (فقط برای دمو)
+  let hash = 0;
+  for (let i = 0; i < pass.length; i++) {
+    const char = pass.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash;
+  }
+  return 'h' + Math.abs(hash).toString(36) + '_' + pass.length;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   USER MODEL
+   ═══════════════════════════════════════════════════════════════ */
+const UserModel = {
+  create({ username, displayName, password }) {
+    const users = Storage.get('users') || {};
+    const code = generateCode();
+    if (!code) throw new Error('ظرفیت پر است');
+
+    const id = 'u_' + now() + '_' + randomInt(1000, 9999);
+
+    const user = {
+      id,
+      username: username.toLowerCase(),
+      displayName,
+      password: hashPassword(password),
+      code,
+      coins: CONFIG.WELCOME_COINS,
+      xp: 0,
+      level: 1,
+      chats: 0,
+      messages: 0,
+      wins: 0,
+      referrals: 0,
+      anonymous: true,
+      notifications: true,
+      dailyLast: null,
+      dailyStreak: 0,
+      ranks: [],
+      banned: false,
+      createdAt: now(),
+      lastActive: now(),
+    };
+
+    users[id] = user;
+    Storage.set('users', users);
+    return user;
+  },
+
+  findByUsername(username) {
+    const users = Storage.get('users') || {};
+    const uname = username.toLowerCase();
+    return Object.values(users).find(u => u.username === uname) || null;
+  },
+
+  findById(id) {
+    const users = Storage.get('users') || {};
+    return users[id] || null;
+  },
+
+  save(user) {
+    const users = Storage.get('users') || {};
+    users[user.id] = user;
+    Storage.set('users', users);
+  },
+
+  addXP(user, amount) {
+    if (amount <= 0) return;
+    user.xp += amount;
+    let leveledUp = false;
+    while (user.xp >= xpNeeded(user.level)) {
+      user.xp -= xpNeeded(user.level);
+      user.level += 1;
+      leveledUp = true;
+    }
+    UserModel.save(user);
+    if (leveledUp) {
+      showToast(`🎉 سطح جدید: ${user.level}!`, 'success');
+    }
+    return leveledUp;
+  },
+
+  activeRank(user) {
+    const now_ = now();
+    const active = user.ranks.filter(r => !r.expiresAt || r.expiresAt > now_);
+    if (active.length === 0) return RANKS.member;
+    active.sort((a, b) => (RANKS[b.key]?.priority || 0) - (RANKS[a.key]?.priority || 0));
+    return RANKS[active[0].key] || RANKS.member;
+  },
+
+  hasRank(user, key) {
+    const now_ = now();
+    return user.ranks.some(r => r.key === key && (!r.expiresAt || r.expiresAt > now_));
+  },
+
+  addRank(user, key) {
+    const rank = RANKS[key];
+    if (!rank) return false;
+
+    // حذف رنک قبلی هم‌نام
+    user.ranks = user.ranks.filter(r => r.key !== key);
+
+    user.ranks.push({
+      key,
+      expiresAt: rank.days > 0 ? now() + rank.days * 86400000 : null,
+      purchasedAt: now(),
+    });
+
+    UserModel.save(user);
+    return true;
+  },
+
+  updateDaily(user) {
+    const t = today();
+    if (user.dailyLast === t) return { ok: false, message: 'امروز قبلاً گرفتی' };
+
+    let streak = 1;
+    if (user.dailyLast === daysAgo(1)) {
+      streak = user.dailyStreak + 1;
+    }
+
+    const reward = CONFIG.DAILY_BASE + streak * CONFIG.DAILY_BONUS_PER_STREAK;
+
+    user.coins += reward;
+    user.dailyLast = t;
+    user.dailyStreak = streak;
+    UserModel.save(user);
+
+    return { ok: true, reward, streak };
+  },
+};
+
+/* ═══════════════════════════════════════════════════════════════
+   UI HELPERS
+   ═══════════════════════════════════════════════════════════════ */
+function showScreen(id) {
+  $$('.screen').forEach(s => s.classList.remove('active'));
+  $(id).classList.add('active');
+}
+
+function showView(name) {
+  $$('.view').forEach(v => v.classList.remove('active'));
+  const el = $('view-' + name) || $(name + '-view');
+  if (el) el.classList.add('active');
+  state.currentView = name;
+
+  // آپدیت bottom nav
+  $$('.nav-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.nav === name);
+  });
+
+  // رفرش داده‌ها
+  if (name === 'profile') renderProfile();
+  if (name === 'shop') renderShop();
+  if (name === 'home') renderHome();
+}
+
+function showToast(text, type = 'info', duration = 3000) {
+  const container = $('toast-container');
+  const toast = document.createElement('div');
+  toast.className = 'toast ' + type;
+  toast.innerHTML = `<span>${text}</span>`;
+  container.appendChild(toast);
+
+  setTimeout(() => {
+    toast.classList.add('leaving');
+    setTimeout(() => toast.remove(), 300);
+  }, duration);
+}
+
+function showModal(html) {
+  $('modal-content').innerHTML = html;
+  $('modal').classList.add('active');
+}
+
+function closeModal() {
+  $('modal').classList.remove('active');
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   AUTH
+   ═══════════════════════════════════════════════════════════════ */
+function setupAuth() {
+  // تب‌ها
+  $$('.auth-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      $$('.auth-tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      $$('.auth-form').forEach(f => f.classList.remove('active'));
+      $(tab.dataset.tab + '-form').classList.add('active');
+      $('auth-error').textContent = '';
+    });
+  });
+
+  // ورود
+  $('login-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const username = $('login-username').value.trim();
+    const password = $('login-password').value;
+
+    if (!username || !password) {
+      $('auth-error').textContent = 'همه فیلدها را پر کن';
+      return;
+    }
+
+    const user = UserModel.findByUsername(username);
+    if (!user) {
+      $('auth-error').textContent = 'یوزرنیم یا رمز اشتباه است';
+      return;
+    }
+
+    if (user.password !== hashPassword(password)) {
+      $('auth-error').textContent = 'یوزرنیم یا رمز اشتباه است';
+      return;
+    }
+
+    if (user.banned) {
+      $('auth-error').textContent = 'حساب شما مسدود است';
+      return;
+    }
+
+    user.lastActive = now();
+    UserModel.save(user);
+    Storage.set('session', user.id);
+    loginUser(user);
+  });
+
+  // ثبت‌نام
+  $('register-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const username = $('reg-username').value.trim();
+    const displayName = $('reg-display').value.trim();
+    const password = $('reg-password').value;
+
+    if (!username || !displayName || !password) {
+      $('auth-error').textContent = 'همه فیلدها را پر کن';
+      return;
+    }
+
+    if (!/^[a-zA-Z0-9_]{3,20}$/.test(username)) {
+      $('auth-error').textContent = 'یوزرنیم باید ۳ تا ۲۰ کاراکتر انگلیسی باشد';
+      return;
+    }
+
+    if (password.length < 4) {
+      $('auth-error').textContent = 'رمز حداقل ۴ کاراکتر باشد';
+      return;
+    }
+
+    if (UserModel.findByUsername(username)) {
+      $('auth-error').textContent = 'این یوزرنیم قبلاً گرفته شده';
+      return;
+    }
+
+    try {
+      const user = UserModel.create({ username, displayName, password });
+      Storage.set('session', user.id);
+      loginUser(user);
+      showToast(`🎉 خوش آمدی ${user.displayName}!`, 'success');
+      showToast(`🪙 ${CONFIG.WELCOME_COINS} سکه هدیه گرفتی`, 'success');
+    } catch (err) {
+      $('auth-error').textContent = err.message;
+    }
+  });
+}
+
+function loginUser(user) {
+  state.currentUser = user;
+  showScreen('app-screen');
+  showView('home');
+  updateTopbar();
+  setupApp();
+}
+
+function logout() {
+  Storage.remove('session');
+  state.currentUser = null;
+  if (state.queueInterval) clearInterval(state.queueInterval);
+  showScreen('auth-screen');
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   TOPBAR
+   ═══════════════════════════════════════════════════════════════ */
+function updateTopbar() {
+  if (!state.currentUser) return;
+  const u = state.currentUser;
+  $('top-name').textContent = u.displayName;
+  $('top-coins').textContent = formatNumber(u.coins);
+  const rank = UserModel.activeRank(u);
+  $('top-avatar').textContent = rank.icon || '🕵️';
+  $('hero-level').textContent = `🏆 سطح ${u.level}`;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   HOME
+   ═══════════════════════════════════════════════════════════════ */
+function renderHome() {
+  if (!state.currentUser) return;
+  updateTopbar();
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   PROFILE
+   ═══════════════════════════════════════════════════════════════ */
+function renderProfile() {
+  const u = state.currentUser;
+  if (!u) return;
+
+  const rank = UserModel.activeRank(u);
+  const needed = xpNeeded(u.level);
+
+  $('profile-avatar').textContent = rank.icon || '🕵️';
+  $('profile-name').textContent = u.displayName;
+  $('profile-code').textContent = '#' + u.code;
+  $('profile-rank').textContent = rank.name;
+  $('profile-level').textContent = u.level;
+  $('profile-xp-text').textContent = `${u.xp}/${needed} XP`;
+  $('profile-xp-bar').style.width = Math.min(100, (u.xp / needed) * 100) + '%';
+
+  $('stat-coins').textContent = formatNumber(u.coins);
+  $('stat-chats').textContent = u.chats;
+  $('stat-messages').textContent = u.messages;
+  $('stat-streak').textContent = u.dailyStreak;
+
+  $('toggle-anon').classList.toggle('active', u.anonymous);
+  $('toggle-notif').classList.toggle('active', u.notifications);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   SHOP
+   ═══════════════════════════════════════════════════════════════ */
+function renderShop() {
+  const u = state.currentUser;
+  if (!u) return;
+
+  $('shop-balance').textContent = formatNumber(u.coins);
+
+  const list = $('shop-list');
+  list.innerHTML = '';
+
+  Object.values(RANKS).forEach(rank => {
+    if (rank.key === 'member') return;
+
+    const owned = UserModel.hasRank(u, rank.key);
+    const canAfford = u.coins >= rank.price;
+
+    const div = document.createElement('div');
+    div.className = 'rank-card';
+    div.innerHTML = `
+      <div class="rank-icon-lg ${rank.css}">${rank.icon}</div>
+      <div class="rank-info">
+        <div class="rank-name">${rank.name}</div>
+        <div class="rank-desc">${rank.days} روز اعتبار</div>
+        <div class="rank-price">🪙 ${formatNumber(rank.price)}</div>
+      </div>
+      <button class="buy-btn" ${owned || !canAfford ? 'disabled' : ''}>
+        ${owned ? '✓ خریداری شده' : canAfford ? 'خرید' : 'کمبود سکه'}
+      </button>
+    `;
+
+    if (!owned && canAfford) {
+      div.querySelector('.buy-btn').addEventListener('click', () => buyRank(rank.key));
+    }
+
+    list.appendChild(div);
+  });
+}
+
+function buyRank(key) {
+  const u = state.currentUser;
+  const rank = RANKS[key];
+  if (!rank || u.coins < rank.price) return;
+
+  if (!confirm(`خرید ${rank.name} با ${formatNumber(rank.price)} سکه؟`)) return;
+
+  u.coins -= rank.price;
+  UserModel.addRank(u, key);
+  UserModel.save(u);
+
+  updateTopbar();
+  renderShop();
+  showToast(`🎉 ${rank.name} خریداری شد!`, 'success');
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   DAILY REWARD
+   ═══════════════════════════════════════════════════════════════ */
+function claimDaily() {
+  const u = state.currentUser;
+  const result = UserModel.updateDaily(u);
+
+  if (!result.ok) {
+    showToast('⏳ ' + result.message, 'error');
+    return;
+  }
+
+  updateTopbar();
+
+  showModal(`
+    <span class="modal-emoji">🎁</span>
+    <div class="modal-title">جایزه روزانه!</div>
+    <div class="modal-text">آفرین! جایزه امروزت رو گرفتی</div>
+    <div class="modal-reward">
+      <div class="modal-reward-value">🪙 +${result.reward}</div>
+      <div class="modal-reward-label">سکه</div>
+    </div>
+    <div class="modal-text">🔥 استریک: ${result.streak} روز</div>
+    <button class="btn btn-primary btn-full" onclick="closeModal()">عالی!</button>
+  `);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   GAMES
+   ═══════════════════════════════════════════════════════════════ */
+function setupGames() {
+  // حدس عدد
+  $$('#guess-grid .guess-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const guess = parseInt(btn.dataset.n);
+      const correct = randomInt(1, 5);
+      const u = state.currentUser;
+
+      $$('#guess-grid .guess-btn').forEach(b => {
+        b.classList.remove('correct', 'wrong');
+        b.disabled = true;
+      });
+
+      if (guess === correct) {
+        btn.classList.add('correct');
+        u.coins += 100;
+        u.wins += 1;
+        UserModel.addXP(u, 20);
+        UserModel.save(u);
+        updateTopbar();
+
+        $('guess-result').className = 'game-result success';
+        $('guess-result').textContent = `🎉 درست حدس زدی! +100 سکه`;
+        showToast('🎉 +100 سکه!', 'success');
+      } else {
+        btn.classList.add('wrong');
+        $$('#guess-grid .guess-btn')[correct - 1].classList.add('correct');
+
+        $('guess-result').className = 'game-result error';
+        $('guess-result').textContent = `❌ اشتباه! عدد درست: ${correct}`;
+      }
+
+      setTimeout(() => {
+        $$('#guess-grid .guess-btn').forEach(b => {
+          b.classList.remove('correct', 'wrong');
+          b.disabled = false;
+        });
+        $('guess-result').className = 'game-result';
+        $('guess-result').textContent = '';
+      }, 2500);
+    });
+  });
+
+  // شیر یا خط
+  $$('.coin-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const choice = btn.dataset.coin;
+      const result = randomChoice(['شیر', 'خط']);
+      const u = state.currentUser;
+
+      const el = $('coin-result');
+      el.innerHTML = result === 'شیر' ? '🦁' : '✖️';
+
+      setTimeout(() => {
+        if (choice === result) {
+          const reward = randomInt(20, 50);
+          u.coins += reward;
+          UserModel.addXP(u, 5);
+          UserModel.save(u);
+          updateTopbar();
+
+          $('coin-game-result').className = 'game-result success';
+          $('coin-game-result').textContent = `🎉 بردی! +${reward} سکه`;
+          showToast(`🎉 +${reward} سکه!`, 'success');
+        } else {
+          $('coin-game-result').className = 'game-result error';
+          $('coin-game-result').textContent = `❌ باختی! نتیجه: ${result}`;
+        }
+
+        setTimeout(() => {
+          $('coin-game-result').className = 'game-result';
+          $('coin-game-result').textContent = '';
+          el.innerHTML = '';
+        }, 2500);
+      }, 600);
+    });
+  });
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   QUEUE & MATCHMAKING
+   ═══════════════════════════════════════════════════════════════ */
+function startQueue() {
+  showView('queue');
+  state.queueStartTime = now();
+
+  $('queue-timer').textContent = '00:00';
+  state.queueInterval = setInterval(() => {
+    const elapsed = Math.floor((now() - state.queueStartTime) / 1000);
+    $('queue-timer').textContent = formatTimer(elapsed);
+  }, 1000);
+
+  // بعد از 2-5 ثانیه یک مخاطب شبیه‌سازی‌شده پیدا می‌شود
+  const waitTime = randomInt(2000, 5000);
+  setTimeout(() => {
+    if (state.currentView === 'queue') {
+      matchFound();
+    }
+  }, waitTime);
+}
+
+function cancelQueue() {
+  if (state.queueInterval) clearInterval(state.queueInterval);
+  state.queueInterval = null;
+  showView('home');
+  showToast('از صف خارج شدی', 'info');
+}
+
+function matchFound() {
+  if (state.queueInterval) clearInterval(state.queueInterval);
+  state.queueInterval = null;
+
+  const bot = {
+    name: randomChoice(BOT_NAMES),
+    isBot: true,
+  };
+
+  state.currentPartner = bot;
+  state.botState = { messageCount: 0, lastMessageTime: 0 };
+
+  $('chat-partner-name').textContent = bot.name;
+  $('chat-partner-avatar').textContent = '🕵️';
+  $('chat-messages').innerHTML = '';
+
+  addSystemMessage('چت شروع شد. با احترام صحبت کن 🙏');
+
+  showView('chat');
+
+  const u = state.currentUser;
+  u.chats += 1;
+  UserModel.addXP(u, CONFIG.CHAT_XP);
+  UserModel.save(u);
+  updateTopbar();
+
+  // بات بعد از 1-2 ثانیه سلام می‌کند
+  setTimeout(() => {
+    if (state.currentView === 'chat') {
+      showTyping();
+      setTimeout(() => {
+        hideTyping();
+        addMessage(randomChoice(BOT_GREETINGS), 'them', bot.name);
+      }, randomInt(800, 1800));
+    }
+  }, randomInt(600, 1500));
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   CHAT
+   ═══════════════════════════════════════════════════════════════ */
+function addMessage(text, from, senderName) {
+  const container = $('chat-messages');
+  const div = document.createElement('div');
+  div.className = 'message ' + from;
+
+  const time = formatTime(now());
+
+  if (from === 'them') {
+    div.innerHTML = `
+      <div class="message-meta">
+        <span>${senderName || 'مخاطب'}</span>
+        <span>🕵️</span>
+      </div>
+      <div>${escapeHTML(text)}</div>
+      <div class="message-time">${time}</div>
+    `;
+  } else {
+    div.innerHTML = `
+      <div>${escapeHTML(text)}</div>
+      <div class="message-time">${time}</div>
+    `;
+  }
+
+  container.appendChild(div);
+  container.scrollTop = container.scrollHeight;
+}
+
+function addSystemMessage(text) {
+  const container = $('chat-messages');
+  const div = document.createElement('div');
+  div.className = 'system-message';
+  div.textContent = text;
+  container.appendChild(div);
+  container.scrollTop = container.scrollHeight;
+}
+
+function showTyping() {
+  const container = $('chat-messages');
+  const existing = container.querySelector('.typing-indicator');
+  if (existing) return;
+
+  const div = document.createElement('div');
+  div.className = 'typing-indicator';
+  div.innerHTML = '<span></span><span></span><span></span>';
+  container.appendChild(div);
+  container.scrollTop = container.scrollHeight;
+}
+
+function hideTyping() {
+  const container = $('chat-messages');
+  const typing = container.querySelector('.typing-indicator');
+  if (typing) typing.remove();
+}
+
+function escapeHTML(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+function sendMessage(text) {
+  if (!text.trim()) return;
+
+  const u = state.currentUser;
+  const now_ = now();
+
+  // Antispam
+  if (now_ - state.lastMessageTime < 500) {
+    state.spamCount++;
+    if (state.spamCount > 3) {
+      showToast('⏳ کمی آرام‌تر!', 'error');
+      return;
+    }
+  } else {
+    state.spamCount = 0;
+  }
+  state.lastMessageTime = now_;
+
+  addMessage(text, 'me');
+
+  u.messages += 1;
+  UserModel.addXP(u, CONFIG.MESSAGE_XP);
+  UserModel.save(u);
+  updateTopbar();
+
+  // پاسخ بات
+  state.botState.messageCount++;
+
+  const delay = randomInt(1000, 2500);
+  const willRespond = Math.random() < 0.85;
+
+  if (willRespond) {
+    setTimeout(() => {
+      if (state.currentView !== 'chat') return;
+      showTyping();
+
+      setTimeout(() => {
+        hideTyping();
+        if (state.currentView !== 'chat') return;
+
+        let response;
+        // هر 4 پیام یک سوال
+        if (state.botState.messageCount % 4 === 0) {
+          response = randomChoice(BOT_QUESTIONS);
+        } else {
+          response = randomChoice(BOT_RESPONSES);
+        }
+
+        addMessage(response, 'them', state.currentPartner.name);
+      }, randomInt(800, 2000));
+    }, delay);
+  }
+}
+
+function endChat() {
+  if (!state.currentPartner) return;
+
+  addSystemMessage('چت پایان یافت. ممنون که با احترام صحبت کردی 🙏');
+
+  setTimeout(() => {
+    state.currentPartner = null;
+    showView('home');
+    showRatingModal();
+  }, 1200);
+}
+
+function showRatingModal() {
+  showModal(`
+    <span class="modal-emoji">⭐</span>
+    <div class="modal-title">چطور بود؟</div>
+    <div class="modal-text">به این چت امتیاز بده</div>
+    <div style="display:flex; gap:8px; justify-content:center; margin-bottom:20px; flex-wrap:wrap;">
+      ${[1,2,3,4,5].map(n => `<button class="btn btn-secondary" style="width:50px;height:50px;padding:0;font-size:20px;" onclick="rateChat(${n})">${n}⭐</button>`).join('')}
+    </div>
+    <button class="btn btn-secondary btn-full" onclick="closeModal()">رد کردن</button>
+  `);
+}
+
+function rateChat(score) {
+  const u = state.currentUser;
+  UserModel.addXP(u, 5);
+  UserModel.save(u);
+  closeModal();
+  showToast(`⭐ ممنون از امتیازت (${score} ستاره)`, 'success');
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   REPORT
+   ═══════════════════════════════════════════════════════════════ */
+function reportUser() {
+  if (!state.currentPartner) {
+    showToast('برای گزارش باید داخل چت باشی', 'error');
+    return;
+  }
+
+  showModal(`
+    <span class="modal-emoji">🚨</span>
+    <div class="modal-title">گزارش کاربر</div>
+    <div class="modal-text">دلیل گزارش را انتخاب کن</div>
+    <div style="display:flex; flex-direction:column; gap:8px; margin-bottom:16px;">
+      <button class="btn btn-secondary btn-full" onclick="submitReport('فحاشی')">🤬 فحاشی</button>
+      <button class="btn btn-secondary btn-full" onclick="submitReport('تهدید')">⚠️ تهدید</button>
+      <button class="btn btn-secondary btn-full" onclick="submitReport('اسپم')">📢 اسپم</button>
+      <button class="btn btn-secondary btn-full" onclick="submitReport('محتوای نامناسب')">🚫 محتوای نامناسب</button>
+    </div>
+    <button class="btn btn-secondary btn-full" onclick="closeModal()">انصراف</button>
+  `);
+}
+
+function submitReport(reason) {
+  const reports = Storage.get('reports') || [];
+  reports.push({
+    reporterId: state.currentUser.id,
+    partner: state.currentPartner?.name || 'نامشخص',
+    reason,
+    time: now(),
+  });
+  Storage.set('reports', reports);
+  closeModal();
+  showToast('✅ گزارش ثبت شد. ممنون!', 'success');
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   APP SETUP
+   ═══════════════════════════════════════════════════════════════ */
+function setupApp() {
+  // Bottom nav
+  $$('.nav-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      showView(btn.dataset.nav);
+    });
+  });
+
+  // Quick cards
+  $$('.quick-card').forEach(card => {
+    card.addEventListener('click', () => {
+      const go = card.dataset.go;
+      if (go === 'daily') {
+        claimDaily();
+      } else {
+        showView(go);
+      }
+    });
+  });
+
+  // Back buttons
+  $$('[data-back]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      showView(btn.dataset.back);
+    });
+  });
+
+  // Start chat
+  $('btn-start-chat').addEventListener('click', startQueue);
+  $('btn-cancel-queue').addEventListener('click', cancelQueue);
+
+  // Chat
+  $('chat-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const input = $('chat-input');
+    sendMessage(input.value);
+    input.value = '';
+    input.focus();
+  });
+
+  $('btn-end-chat').addEventListener('click', endChat);
+  $('btn-report').addEventListener('click', reportUser);
+
+  // Toggles
+  $('toggle-anon').addEventListener('click', () => {
+    const u = state.currentUser;
+    u.anonymous = !u.anonymous;
+    UserModel.save(u);
+    $('toggle-anon').classList.toggle('active', u.anonymous);
+    showToast(u.anonymous ? '🕵️ حالت ناشناس فعال' : '👁 حالت عادی فعال', 'info');
+  });
+
+  $('toggle-notif').addEventListener('click', () => {
+    const u = state.currentUser;
+    u.notifications = !u.notifications;
+    UserModel.save(u);
+    $('toggle-notif').classList.toggle('active', u.notifications);
+    showToast(u.notifications ? '🔔 اعلان‌ها روشن' : '🔕 اعلان‌ها خاموش', 'info');
+  });
+
+  // Logout
+  $('btn-logout').addEventListener('click', () => {
+    if (confirm('از حساب خارج می‌شوی؟')) logout();
+  });
+
+  // Notifications (نمایش پیام)
+  $('btn-notifications').addEventListener('click', () => {
+    showToast('🔔 اعلان جدیدی نداری', 'info');
+  });
+
+  // Modal
+  $('modal').addEventListener('click', (e) => {
+    if (e.target === $('modal')) closeModal();
+  });
+
+  // Games
+  setupGames();
+
+  // آپدیت اولیه
+  renderHome();
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   BOOT
+   ═══════════════════════════════════════════════════════════════ */
+function boot() {
+  setupAuth();
+
+  const sessionId = Storage.get('session');
+  if (sessionId) {
+    const user = UserModel.findById(sessionId);
+    if (user) {
+      user.lastActive = now();
+      UserModel.save(user);
+      loginUser(user);
+      return;
+    }
+  }
+
+  showScreen('auth-screen');
+}
+
+// شروع
+boot();
+</script>
+
 </body>
 </html>
