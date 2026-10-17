@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>چت ناشناس</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- صفحه ورود/ثبت‌نام -->
+  <div id="auth-screen" class="screen active">
+    <div class="auth-box">
+      <h1>🕵️ چت ناشناس</h1>
+      <p class="subtitle">با آدم‌های جدید آشنا شو، ناشناس</p>
+
+      <div class="tabs">
+        <button class="tab active" data-tab="login">ورود</button>
+        <button class="tab" data-tab="register">ثبت‌نام</button>
+      </div>
+
+      <form id="login-form" class="form active">
+        <input type="text" id="login-username" placeholder="یوزرنیم" required />
+        <input type="password" id="login-password" placeholder="رمز" required />
+        <button type="submit">ورود</button>
+      </form>
+
+      <form id="register-form" class="form">
+        <input type="text" id="reg-username" placeholder="یوزرنیم (انگلیسی)" required />
+        <input type="text" id="reg-display" placeholder="نام نمایشی" required />
+        <input type="password" id="reg-password" placeholder="رمز (حداقل ۴ کاراکتر)" required />
+        <button type="submit">ثبت‌نام</button>
+      </form>
+
+      <div id="auth-error" class="error"></div>
+    </div>
+  </div>
+
+  <!-- اپ اصلی -->
+  <div id="app-screen" class="screen">
+    <header class="topbar">
+      <div class="user-info">
+        <span id="top-name"></span>
+        <span id="top-coins">🪙 0</span>
+      </div>
+      <div class="actions">
+        <button id="btn-profile" title="پروفایل">👤</button>
+        <button id="btn-logout" title="خروج">🚪</button>
+      </div>
+    </header>
+
+    <!-- هوم -->
+    <div id="home-view" class="view active">
+      <div class="card">
+        <h2>شروع چت ناشناس</h2>
+        <p>با یک کلیک به یک غریبه وصل شو</p>
+        <button id="btn-start-chat" class="primary">💬 شروع چت</button>
+      </div>
+
+      <div class="grid">
+        <div class="mini-card" id="go-daily">
+          <div>🎁</div>
+          <div>جایزه روزانه</div>
+        </div>
+        <div class="mini-card" id="go-shop">
+          <div>🏆</div>
+          <div>رنک‌ها</div>
+        </div>
+        <div class="mini-card" id="go-game">
+          <div>🎮</div>
+          <div>بازی</div>
+        </div>
+        <div class="mini-card" id="go-profile">
+          <div>👤</div>
+          <div>پروفایل</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- صف انتظار -->
+    <div id="queue-view" class="view">
+      <div class="center-box">
+        <div class="spinner"></div>
+        <h2>در حال پیدا کردن مخاطب...</h2>
+        <p>لطفاً صبر کن</p>
+        <button id="btn-cancel-queue" class="secondary">لغو</button>
+      </div>
+    </div>
+
+    <!-- چت -->
+    <div id="chat-view" class="view">
+      <div class="chat-header">
+        <div id="chat-partner-name"></div>
+        <button id="btn-end-chat" class="danger">پایان چت</button>
+      </div>
+      <div id="messages" class="messages"></div>
+      <form id="message-form" class="message-form">
+        <input type="text" id="message-input" placeholder="پیام..." autocomplete="off" />
+        <button type="submit">➤</button>
+      </form>
+    </div>
+
+    <!-- پروفایل -->
+    <div id="profile-view" class="view">
+      <div class="card">
+        <h2 id="prof-name"></h2>
+        <div class="prof-grid">
+          <div><span>کد:</span> <code id="prof-code"></code></div>
+          <div><span>سطح:</span> <b id="prof-level"></b></div>
+          <div><span>XP:</span> <b id="prof-xp"></b></div>
+          <div><span>سکه:</span> <b id="prof-coins"></b></div>
+          <div><span>رنک:</span> <b id="prof-rank"></b></div>
+          <div><span>چت‌ها:</span> <b id="prof-chats"></b></div>
+          <div><span>پیام‌ها:</span> <b id="prof-messages"></b></div>
+          <div><span>استریک:</span> <b id="prof-streak"></b></div>
+        </div>
+        <button id="btn-back-home" class="secondary">بازگشت</button>
+      </div>
+    </div>
+
+    <!-- فروشگاه -->
+    <div id="shop-view" class="view">
+      <div class="card">
+        <h2>🏆 فروشگاه رنک</h2>
+        <div id="shop-list"></div>
+        <button id="btn-back-home-2" class="secondary">بازگشت</button>
+      </div>
+    </div>
+
+    <!-- بازی -->
+    <div id="game-view" class="view">
+      <div class="card">
+        <h2>🎮 بازی</h2>
+        <p>عدد بین ۱ تا ۵ حدس بزن</p>
+        <div class="guess-buttons" id="guess-buttons">
+          <button data-n="1">1</button>
+          <button data-n="2">2</button>
+          <button data-n="3">3</button>
+          <button data-n="4">4</button>
+          <button data-n="5">5</button>
+        </div>
+        <div id="game-result"></div>
+        <button id="btn-back-home-3" class="secondary">بازگشت</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
