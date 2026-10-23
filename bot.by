@@ -3,8 +3,10 @@
 # کتابخانه:
 # pip install pyTelegramBotAPI
 
+import os
 import telebot
 from telebot import types
+from supabase import create_client, Client
 from datetime import datetime, timedelta
 import random
 import threading
@@ -15,9 +17,23 @@ import re
 # فقط این قسمت را تغییر بده
 # ============================================================
 
-TOKEN = "8978005144:AAGUPfhRMcaOBXxXpIobSY2IKNJvHoV29zM"
+TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = 7723971526
 BOT_USERNAME = "chat_iranian_bot"
+
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+
+if not TOKEN:
+    raise RuntimeError("BOT_TOKEN is not set in GitHub Secrets")
+
+if not SUPABASE_URL or not SUPABASE_KEY:
+    raise RuntimeError("SUPABASE_URL or SUPABASE_KEY is not set in GitHub Secrets")
+
+try:
+    supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+except Exception as e:
+    raise RuntimeError(f"Supabase connection setup failed: {e}")
 
 # ============================================================
 # تنظیمات
@@ -29,6 +45,190 @@ ONLINE_MINUTES = 10
 ACCOUNT_CODE_MAX = 100000
 
 bot = telebot.TeleBot(TOKEN, parse_mode="HTML")
+
+# ============================================================
+# Supabase - ذخیره و بازیابی اطلاعات اصلی کاربران
+# ============================================================
+
+def db_user_payload(u):
+    """فقط ستون‌هایی را می‌فرستیم که در جدول users این پروژه ساخته شده‌اند."""
+    payload = {
+        "telegram_id": int(u["id"]),
+        "username": u.get("username") or "",
+        "first_name": u.get("name") or "کاربر",
+        "phone": u.get("phone"),
+        "profile_photo": u.get("photo"),
+        "account_code": u.get("code"),
+        "coins": int(u.get("coins", 0)),
+        "balance": int(u.get("balance", 0)),
+        "xp": int(u.get("xp", 0)),
+        "level": int(u.get("level", 1)),
+        "banned": bool(u.get("banned", False)),
+        "last_activity": u.get("last_activity", now()).isoformat() if hasattr(u.get("last_activity", now()), "isoformat") else u.get("last_activity"),
+    }
+    return payload
+
+
+def db_save_user(uid):
+    try:
+        u = users.get(uid)
+        if not u:
+            return False
+        supabase.table("users").update(db_user_payload(u)).eq("telegram_id", int(uid)).execute()
+        return True
+    except Exception as e:
+        print(f"[DB] save user {uid} failed: {e}")
+        return False
+
+
+def db_insert_user(u):
+    try:
+        result = supabase.table("users").insert(db_user_payload(u)).execute()
+        row = (result.data or [None])[0]
+        if row:
+            u["_db_id"] = row.get("id")
+        return bool(row)
+    except Exception as e:
+        print(f"[DB] insert user {u.get('id')} failed: {e}")
+        return False
+
+
+def db_load_users():
+    """کاربران را در شروع بات از Supabase داخل حافظه می‌آورد."""
+    try:
+        result = supabase.table("users").select("*").execute()
+        rows = result.data or []
+        loaded = 0
+        for row in rows:
+            telegram_id = row.get("telegram_id")
+            if telegram_id is None:
+                continue
+            uid = int(telegram_id)
+            created = row.get("created_at")
+            last_activity = row.get("last_activity")
+            try:
+                created_dt = datetime.fromisoformat(created.replace("Z", "+00:00")) if created else now()
+            except Exception:
+                created_dt = now()
+            try:
+                last_dt = datetime.fromisoformat(last_activity.replace("Z", "+00:00")) if last_activity else now()
+            except Exception:
+                last_dt = now()
+
+            users[uid] = {
+                "id": uid,
+                "_db_id": row.get("id"),
+                "username": row.get("username") or "",
+                "name": row.get("first_name") or "کاربر",
+                "code": row.get("account_code") or "",
+                "coins": int(row.get("coins") or 0),
+                "balance": int(row.get("balance") or 0),
+                "xp": int(row.get("xp") or 0),
+                "level": int(row.get("level") or 1),
+                "ranks": [],
+                "phone": row.get("phone"),
+                "photo": row.get("profile_photo"),
+                "anonymous": True,
+                "banned": bool(row.get("banned", False)),
+                "warnings": 0,
+                "messages": 0,
+                "chats": 0,
+                "wins": 0,
+                "referrals": 0,
+                "joined": created_dt,
+                "last_activity": last_dt,
+                "game_wins": 0,
+                "game_plays": 0,
+                "daily_last": None,
+                "daily_streak": 0,
+                "mission_progress": {},
+                "_role_keys": set(),
+            }
+            user_last_activity[uid] = last_dt
+            loaded += 1
+
+        print(f"[DB] Loaded {loaded} users from Supabase")
+        return True
+    except Exception as e:
+        print(f"[DB] load users failed: {e}")
+        return False
+
+
+def db_save_rank_assignment(uid, rank_key, expires):
+    """رنک خریداری/اعطا شده را در user_ranks ثبت می‌کند."""
+    try:
+        u = users.get(uid)
+        if not u or not u.get("_db_id"):
+            return False
+        rank_rows = supabase.table("ranks").select("id").eq("key", rank_key).limit(1).execute().data or []
+        if not rank_rows:
+            return False
+        payload = {
+            "user_id": u["_db_id"],
+            "rank_id": rank_rows[0]["id"],
+            "expires_at": expires.isoformat() if expires else None,
+        }
+        supabase.table("user_ranks").insert(payload).execute()
+        return True
+    except Exception as e:
+        print(f"[DB] save rank {uid}/{rank_key} failed: {e}")
+        return False
+
+
+def db_load_ranks_and_roles():
+    """رنک‌ها و نقش‌های مدیریتی را از جداول Supabase می‌خواند."""
+    try:
+        rank_rows = supabase.table("ranks").select("*").execute().data or []
+        rank_by_id = {str(r.get("id")): r for r in rank_rows if r.get("id") is not None}
+
+        user_rank_rows = supabase.table("user_ranks").select("*").execute().data or []
+        db_to_uid = {str(u.get("_db_id")): uid for uid, u in users.items() if u.get("_db_id") is not None}
+        for rr in user_rank_rows:
+            uid = db_to_uid.get(str(rr.get("user_id")))
+            if uid is None:
+                continue
+            rank_row = rank_by_id.get(str(rr.get("rank_id")), {})
+            rank_key = rank_row.get("key") or rank_row.get("slug") or rank_row.get("code")
+            if not rank_key or rank_key not in RANKS:
+                continue
+            expires = rr.get("expires_at")
+            exp_dt = None
+            if expires:
+                try:
+                    exp_dt = datetime.fromisoformat(str(expires).replace("Z", "+00:00"))
+                except Exception:
+                    exp_dt = None
+            users[uid]["ranks"].append({"rank": rank_key, "expires": exp_dt})
+
+        role_rows = supabase.table("roles").select("*").execute().data or []
+        role_key_by_id = {}
+        for role in role_rows:
+            rid = role.get("id")
+            key = role.get("key") or role.get("name")
+            if rid is not None and key:
+                role_key_by_id[str(rid)] = str(key)
+
+        user_role_rows = supabase.table("user_roles").select("*").execute().data or []
+        for ur in user_role_rows:
+            uid = db_to_uid.get(str(ur.get("user_id")))
+            if uid is None:
+                continue
+            key = role_key_by_id.get(str(ur.get("role_id")))
+            if key:
+                users[uid].setdefault("_role_keys", set()).add(key)
+
+        print("[DB] Loaded ranks and roles")
+    except Exception as e:
+        print(f"[DB] load ranks/roles failed: {e}")
+
+
+def db_sync_user(uid):
+    """ذخیره امن تغییرات کاربر؛ خطای دیتابیس بات را متوقف نمی‌کند."""
+    try:
+        db_save_user(uid)
+        return True
+    except Exception:
+        return False
 
 # ============================================================
 # حافظه موقت
@@ -134,11 +334,14 @@ def is_moderator(uid):
     if not u:
         return False
 
+    roles = u.get("_role_keys", set())
+    if roles.intersection({"moderator", "senior_moderator", "senior_inspector", "manager", "owner"}):
+        return True
+
+    # سازگاری با نسخه قدیمی
     for r in u.get("ranks", []):
         if r["rank"] == "moderator":
-            if r.get("expires") is None:
-                return True
-            if now() < r["expires"]:
+            if r.get("expires") is None or now() < r["expires"]:
                 return True
 
     return False
@@ -199,7 +402,22 @@ def create_user(message, referral=None):
         "daily_last": None,
         "daily_streak": 0,
         "mission_progress": {},
+        "_role_keys": set(),
     }
+
+    if not db_insert_user(users[uid]):
+        # اگر کاربر قبلاً در دیتابیس وجود داشته ولی حافظه خالی بوده، دوباره از دیتابیس می‌خوانیم.
+        try:
+            row = (supabase.table("users").select("*").eq("telegram_id", int(uid)).limit(1).execute().data or [None])[0]
+            if row:
+                users[uid]["_db_id"] = row.get("id")
+                users[uid]["code"] = row.get("account_code") or users[uid]["code"]
+                users[uid]["coins"] = int(row.get("coins") or users[uid]["coins"])
+                users[uid]["balance"] = int(row.get("balance") or 0)
+                users[uid]["xp"] = int(row.get("xp") or 0)
+                users[uid]["level"] = int(row.get("level") or 1)
+        except Exception as e:
+            print(f"[DB] recovery for user {uid} failed: {e}")
 
     admin_log(
         "ثبت کاربر",
@@ -236,6 +454,7 @@ def ensure_user(message):
 
     touch(uid)
     users[uid]["last_activity"] = now()
+    db_sync_user(uid)
 
     return users[uid]
 
@@ -391,6 +610,8 @@ def add_xp(uid, amount):
             f"🎉 <b>لول آپ شد!</b>\n\n"
             f"سطح جدید: {u['level']}"
         )
+
+    db_sync_user(uid)
 
 
 # ============================================================
@@ -953,6 +1174,7 @@ def buy_rank(uid, rank):
         return
 
     users[uid]["coins"] -= r["price"]
+    db_sync_user(uid)
 
     expires = now() + timedelta(days=r["days"])
 
@@ -960,6 +1182,8 @@ def buy_rank(uid, rank):
         "rank": rank,
         "expires": expires
     })
+    db_save_rank_assignment(uid, rank, expires)
+    db_sync_user(uid)
 
     transaction(
         uid,
@@ -1001,6 +1225,7 @@ def daily(uid):
 
     u["coins"] += reward
     u["daily_last"] = today
+    db_sync_user(uid)
 
     add_xp(uid, 20)
 
@@ -1066,6 +1291,7 @@ def coin_game(uid):
     reward = random.randint(5, 20)
 
     u["coins"] += reward
+    db_sync_user(uid)
     add_xp(uid, 5)
 
     bot.send_message(
@@ -1464,6 +1690,7 @@ def apply_coin_change(target, amount):
         0,
         users[target]["coins"] + amount
     )
+    db_sync_user(target)
 
     transaction(
         target,
@@ -1493,6 +1720,7 @@ def apply_balance_change(target, amount):
         0,
         users[target]["balance"] + amount
     )
+    db_sync_user(target)
 
     transaction(
         target,
@@ -1550,6 +1778,8 @@ def give_rank_admin(target, rank):
         "rank": rank,
         "expires": expires
     })
+    db_save_rank_assignment(target, rank, expires)
+    db_sync_user(target)
 
     notify(
         target,
@@ -2342,9 +2572,10 @@ def callbacks(call):
     elif data == "admin_security":
         bot.send_message(
             uid,
-            "🔐 امنیت:\n\n"
-            "توکن را در کد عمومی منتشر نکن.\n"
-            "برای نسخه واقعی از دیتابیس استفاده کن."
+            "🔐 <b>امنیت</b>\n\n"
+            "✅ توکن بات از GitHub Secret خوانده می‌شود.\n"
+            "✅ کلید Supabase از GitHub Secret خوانده می‌شود.\n"
+            "✅ اطلاعات اصلی کاربران در Supabase ذخیره می‌شود."
         )
 
     elif data == "admin_export":
@@ -3611,11 +3842,35 @@ def rank_cleaner():
 
 
 # ============================================================
+# بارگذاری اولیه دیتابیس
+# ============================================================
+
+# اکنون اطلاعات قبلی کاربران از Supabase وارد حافظه بات می‌شود.
+db_load_users()
+db_load_ranks_and_roles()
+
+
+# ============================================================
 # اجرای پس‌زمینه
 # ============================================================
 
 threading.Thread(
     target=background_worker,
+    daemon=True
+).start()
+
+def db_sync_worker():
+    while True:
+        try:
+            for uid in list(users.keys()):
+                db_sync_user(uid)
+        except Exception as e:
+            print(f"[DB] periodic sync failed: {e}")
+        time.sleep(15)
+
+
+threading.Thread(
+    target=db_sync_worker,
     daemon=True
 ).start()
 
