@@ -3,37 +3,56 @@
 # کتابخانه:
 # pip install pyTelegramBotAPI
 
-import os
 import telebot
 from telebot import types
-from supabase import create_client, Client
 from datetime import datetime, timedelta
 import random
 import threading
 import time
 import re
+import os
+
+try:
+    from supabase import create_client, Client
+except Exception:
+    create_client = None
+    Client = object
 
 # ============================================================
 # فقط این قسمت را تغییر بده
 # ============================================================
 
 TOKEN = os.getenv("BOT_TOKEN")
+
+if not TOKEN:
+    raise RuntimeError("BOT_TOKEN is not set in GitHub Secrets")
 ADMIN_ID = 7723971526
 BOT_USERNAME = "chat_iranian_bot"
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+supabase = None
+SUPABASE_STATUS = "❌ متصل نیست"
 
-if not TOKEN:
-    raise RuntimeError("BOT_TOKEN is not set in GitHub Secrets")
+if SUPABASE_URL and SUPABASE_KEY and create_client:
+    try:
+        supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+        SUPABASE_STATUS = "✅ متصل و آماده"
+    except Exception as e:
+        SUPABASE_STATUS = f"⚠️ خطا در اتصال: {str(e)[:120]}"
+elif not SUPABASE_URL or not SUPABASE_KEY:
+    SUPABASE_STATUS = "⚠️ Secretهای Supabase تنظیم نشده‌اند"
 
-if not SUPABASE_URL or not SUPABASE_KEY:
-    raise RuntimeError("SUPABASE_URL or SUPABASE_KEY is not set in GitHub Secrets")
+# نقش‌های مدیریتی دائمی در Supabase
+ROLE_DEFS = {
+    "moderator": {"label": "🛡️ ناظر", "level": 10},
+    "senior_moderator": {"label": "🔰 ناظر ارشد", "level": 20},
+    "senior_inspector": {"label": "🕵️‍♂️ بازرس ارشد", "level": 30},
+    "manager": {"label": "⚙️ مدیر", "level": 40},
+    "owner": {"label": "👑 مالک", "level": 100},
+}
 
-try:
-    supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
-except Exception as e:
-    raise RuntimeError(f"Supabase connection setup failed: {e}")
+local_roles = {}
 
 # ============================================================
 # تنظیمات
@@ -45,190 +64,6 @@ ONLINE_MINUTES = 10
 ACCOUNT_CODE_MAX = 100000
 
 bot = telebot.TeleBot(TOKEN, parse_mode="HTML")
-
-# ============================================================
-# Supabase - ذخیره و بازیابی اطلاعات اصلی کاربران
-# ============================================================
-
-def db_user_payload(u):
-    """فقط ستون‌هایی را می‌فرستیم که در جدول users این پروژه ساخته شده‌اند."""
-    payload = {
-        "telegram_id": int(u["id"]),
-        "username": u.get("username") or "",
-        "first_name": u.get("name") or "کاربر",
-        "phone": u.get("phone"),
-        "profile_photo": u.get("photo"),
-        "account_code": u.get("code"),
-        "coins": int(u.get("coins", 0)),
-        "balance": int(u.get("balance", 0)),
-        "xp": int(u.get("xp", 0)),
-        "level": int(u.get("level", 1)),
-        "banned": bool(u.get("banned", False)),
-        "last_activity": u.get("last_activity", now()).isoformat() if hasattr(u.get("last_activity", now()), "isoformat") else u.get("last_activity"),
-    }
-    return payload
-
-
-def db_save_user(uid):
-    try:
-        u = users.get(uid)
-        if not u:
-            return False
-        supabase.table("users").update(db_user_payload(u)).eq("telegram_id", int(uid)).execute()
-        return True
-    except Exception as e:
-        print(f"[DB] save user {uid} failed: {e}")
-        return False
-
-
-def db_insert_user(u):
-    try:
-        result = supabase.table("users").insert(db_user_payload(u)).execute()
-        row = (result.data or [None])[0]
-        if row:
-            u["_db_id"] = row.get("id")
-        return bool(row)
-    except Exception as e:
-        print(f"[DB] insert user {u.get('id')} failed: {e}")
-        return False
-
-
-def db_load_users():
-    """کاربران را در شروع بات از Supabase داخل حافظه می‌آورد."""
-    try:
-        result = supabase.table("users").select("*").execute()
-        rows = result.data or []
-        loaded = 0
-        for row in rows:
-            telegram_id = row.get("telegram_id")
-            if telegram_id is None:
-                continue
-            uid = int(telegram_id)
-            created = row.get("created_at")
-            last_activity = row.get("last_activity")
-            try:
-                created_dt = datetime.fromisoformat(created.replace("Z", "+00:00")) if created else now()
-            except Exception:
-                created_dt = now()
-            try:
-                last_dt = datetime.fromisoformat(last_activity.replace("Z", "+00:00")) if last_activity else now()
-            except Exception:
-                last_dt = now()
-
-            users[uid] = {
-                "id": uid,
-                "_db_id": row.get("id"),
-                "username": row.get("username") or "",
-                "name": row.get("first_name") or "کاربر",
-                "code": row.get("account_code") or "",
-                "coins": int(row.get("coins") or 0),
-                "balance": int(row.get("balance") or 0),
-                "xp": int(row.get("xp") or 0),
-                "level": int(row.get("level") or 1),
-                "ranks": [],
-                "phone": row.get("phone"),
-                "photo": row.get("profile_photo"),
-                "anonymous": True,
-                "banned": bool(row.get("banned", False)),
-                "warnings": 0,
-                "messages": 0,
-                "chats": 0,
-                "wins": 0,
-                "referrals": 0,
-                "joined": created_dt,
-                "last_activity": last_dt,
-                "game_wins": 0,
-                "game_plays": 0,
-                "daily_last": None,
-                "daily_streak": 0,
-                "mission_progress": {},
-                "_role_keys": set(),
-            }
-            user_last_activity[uid] = last_dt
-            loaded += 1
-
-        print(f"[DB] Loaded {loaded} users from Supabase")
-        return True
-    except Exception as e:
-        print(f"[DB] load users failed: {e}")
-        return False
-
-
-def db_save_rank_assignment(uid, rank_key, expires):
-    """رنک خریداری/اعطا شده را در user_ranks ثبت می‌کند."""
-    try:
-        u = users.get(uid)
-        if not u or not u.get("_db_id"):
-            return False
-        rank_rows = supabase.table("ranks").select("id").eq("key", rank_key).limit(1).execute().data or []
-        if not rank_rows:
-            return False
-        payload = {
-            "user_id": u["_db_id"],
-            "rank_id": rank_rows[0]["id"],
-            "expires_at": expires.isoformat() if expires else None,
-        }
-        supabase.table("user_ranks").insert(payload).execute()
-        return True
-    except Exception as e:
-        print(f"[DB] save rank {uid}/{rank_key} failed: {e}")
-        return False
-
-
-def db_load_ranks_and_roles():
-    """رنک‌ها و نقش‌های مدیریتی را از جداول Supabase می‌خواند."""
-    try:
-        rank_rows = supabase.table("ranks").select("*").execute().data or []
-        rank_by_id = {str(r.get("id")): r for r in rank_rows if r.get("id") is not None}
-
-        user_rank_rows = supabase.table("user_ranks").select("*").execute().data or []
-        db_to_uid = {str(u.get("_db_id")): uid for uid, u in users.items() if u.get("_db_id") is not None}
-        for rr in user_rank_rows:
-            uid = db_to_uid.get(str(rr.get("user_id")))
-            if uid is None:
-                continue
-            rank_row = rank_by_id.get(str(rr.get("rank_id")), {})
-            rank_key = rank_row.get("key") or rank_row.get("slug") or rank_row.get("code")
-            if not rank_key or rank_key not in RANKS:
-                continue
-            expires = rr.get("expires_at")
-            exp_dt = None
-            if expires:
-                try:
-                    exp_dt = datetime.fromisoformat(str(expires).replace("Z", "+00:00"))
-                except Exception:
-                    exp_dt = None
-            users[uid]["ranks"].append({"rank": rank_key, "expires": exp_dt})
-
-        role_rows = supabase.table("roles").select("*").execute().data or []
-        role_key_by_id = {}
-        for role in role_rows:
-            rid = role.get("id")
-            key = role.get("key") or role.get("name")
-            if rid is not None and key:
-                role_key_by_id[str(rid)] = str(key)
-
-        user_role_rows = supabase.table("user_roles").select("*").execute().data or []
-        for ur in user_role_rows:
-            uid = db_to_uid.get(str(ur.get("user_id")))
-            if uid is None:
-                continue
-            key = role_key_by_id.get(str(ur.get("role_id")))
-            if key:
-                users[uid].setdefault("_role_keys", set()).add(key)
-
-        print("[DB] Loaded ranks and roles")
-    except Exception as e:
-        print(f"[DB] load ranks/roles failed: {e}")
-
-
-def db_sync_user(uid):
-    """ذخیره امن تغییرات کاربر؛ خطای دیتابیس بات را متوقف نمی‌کند."""
-    try:
-        db_save_user(uid)
-        return True
-    except Exception:
-        return False
 
 # ============================================================
 # حافظه موقت
@@ -314,6 +149,78 @@ def is_admin(uid):
     return uid == ADMIN_ID
 
 
+def _supabase_roles(uid):
+    """نقش‌ها را از Supabase می‌خواند؛ در صورت خطا از کش محلی استفاده می‌کند."""
+    roles = set(local_roles.get(uid, []))
+    if not supabase:
+        return roles
+    try:
+        rows = (supabase.table("user_roles")
+                .select("role_id")
+                .eq("user_id", uid)
+                .execute().data or [])
+        for row in rows:
+            role_id = row.get("role_id")
+            if role_id is None:
+                continue
+            role_rows = (supabase.table("roles")
+                         .select("name")
+                         .eq("id", role_id)
+                         .limit(1)
+                         .execute().data or [])
+            if role_rows and role_rows[0].get("name"):
+                roles.add(role_rows[0]["name"])
+        local_roles[uid] = list(roles)
+    except Exception:
+        pass
+    return roles
+
+
+def user_roles(uid):
+    roles = _supabase_roles(uid)
+    if uid == ADMIN_ID:
+        roles.add("owner")
+    return roles
+
+
+def has_role(uid, role):
+    return role in user_roles(uid)
+
+
+def is_manager(uid):
+    return is_admin(uid) or has_role(uid, "manager")
+
+
+def is_admin_staff(uid):
+    return is_admin(uid) or has_role(uid, "manager")
+
+
+def can_moderate(uid):
+    return is_admin_staff(uid) or any(
+        has_role(uid, r) for r in ("moderator", "senior_moderator", "senior_inspector")
+    ) or _legacy_moderator(uid)
+
+
+def _legacy_moderator(uid):
+    u = users.get(uid)
+    if not u:
+        return False
+    for r in u.get("ranks", []):
+        if r.get("rank") == "moderator":
+            expires = r.get("expires")
+            if expires is None or now() < expires:
+                return True
+    return False
+
+
+def role_label(uid):
+    roles = user_roles(uid)
+    if "owner" in roles:
+        return ROLE_DEFS["owner"]["label"]
+    active = sorted((ROLE_DEFS[r]["level"], ROLE_DEFS[r]["label"]) for r in roles if r in ROLE_DEFS)
+    return active[-1][1] if active else "👤 کاربر"
+
+
 def is_banned(uid):
     if uid in temp_bans:
         if now() < temp_bans[uid]["until"]:
@@ -327,24 +234,114 @@ def is_banned(uid):
 
 
 def is_moderator(uid):
+    return can_moderate(uid)
+
+
+def _role_id(role_name):
+    if not supabase:
+        return None
+    try:
+        rows = supabase.table("roles").select("id,name").eq("name", role_name).limit(1).execute().data or []
+        if rows:
+            return rows[0]["id"]
+        created = supabase.table("roles").insert({
+            "name": role_name,
+            "display_name": ROLE_DEFS.get(role_name, {}).get("label", role_name)
+        }).execute().data or []
+        return created[0]["id"] if created else None
+    except Exception:
+        return None
+
+
+def assign_role(target, role, actor):
+    if role not in ROLE_DEFS or target not in users:
+        return False, "نقش یا کاربر نامعتبر است."
+    if role == "owner" and actor != ADMIN_ID:
+        return False, "فقط مالک اصلی می‌تواند نقش مالک را تعیین کند."
+    if target == ADMIN_ID and role != "owner":
+        return False, "مالک اصلی قابل تنزل نیست."
+    local_roles.setdefault(target, [])
+    if role not in local_roles[target]:
+        local_roles[target].append(role)
+    role_id = _role_id(role)
+    if supabase and role_id is not None:
+        try:
+            supabase.table("user_roles").upsert({"user_id": target, "role_id": role_id}, on_conflict="user_id,role_id").execute()
+        except Exception as e:
+            return False, f"نقش محلی ثبت شد ولی ذخیره Supabase خطا داشت: {str(e)[:100]}"
+    admin_log("اعطای نقش", target, f"{role} توسط {actor}")
+    notify(target, f"🎖 <b>نقش جدید</b>\n\nنقش شما: {ROLE_DEFS[role]['label']}")
+    return True, "نقش با موفقیت اعطا شد."
+
+
+def remove_role(target, role, actor):
+    if role not in ROLE_DEFS or target not in users:
+        return False, "نقش یا کاربر نامعتبر است."
+    if role == "owner":
+        return False, "نقش مالک قابل حذف نیست."
+    if target == ADMIN_ID:
+        return False, "نقش‌های مالک اصلی قابل تغییر نیست."
+    local_roles.setdefault(target, [])
+    if role in local_roles[target]:
+        local_roles[target].remove(role)
+    role_id = _role_id(role)
+    if supabase and role_id is not None:
+        try:
+            supabase.table("user_roles").delete().eq("user_id", target).eq("role_id", role_id).execute()
+        except Exception as e:
+            return False, f"نقش محلی حذف شد ولی حذف Supabase خطا داشت: {str(e)[:100]}"
+    admin_log("حذف نقش", target, f"{role} توسط {actor}")
+    notify(target, f"ℹ️ نقش {ROLE_DEFS[role]['label']} از حساب شما حذف شد.")
+    return True, "نقش با موفقیت حذف شد."
+
+
+def role_management_menu():
+    kb = types.InlineKeyboardMarkup(row_width=2)
+    kb.add(
+        types.InlineKeyboardButton("➕ افزودن نقش", callback_data="role_add"),
+        types.InlineKeyboardButton("➖ حذف نقش", callback_data="role_remove")
+    )
+    kb.add(types.InlineKeyboardButton("📋 فهرست ناظران و مدیران", callback_data="role_list"))
+    return kb
+
+
+def management_panel(uid):
+    role = role_label(uid)
     if is_admin(uid):
-        return True
+        title = "👑 پنل مالک"
+    elif has_role(uid, "manager"):
+        title = "⚙️ پنل مدیر"
+    elif has_role(uid, "senior_inspector"):
+        title = "🕵️‍♂️ پنل بازرس ارشد"
+    elif has_role(uid, "senior_moderator"):
+        title = "🔰 پنل ناظر ارشد"
+    else:
+        title = "🛡️ پنل ناظر"
+    bot.send_message(uid, f"{title}\n\nنقش فعلی: {role}", reply_markup=admin_menu() if is_admin_staff(uid) else moderator_menu())
 
-    u = users.get(uid)
-    if not u:
-        return False
 
-    roles = u.get("_role_keys", set())
-    if roles.intersection({"moderator", "senior_moderator", "senior_inspector", "manager", "owner"}):
-        return True
+def role_list(uid):
+    text = "👥 <b>نقش‌های مدیریتی</b>\n\n"
+    found = False
+    for user_id, u in users.items():
+        roles = [ROLE_DEFS[r]["label"] for r in user_roles(user_id) if r in ROLE_DEFS and r != "owner"]
+        if user_id == ADMIN_ID:
+            roles = [ROLE_DEFS["owner"]["label"]]
+        if roles:
+            found = True
+            text += f"👤 {u.get('name','کاربر')} | <code>{u.get('code','')}</code>\n" + "، ".join(roles) + "\n\n"
+    if not found:
+        text += "هیچ نقش مدیریتی ثبت نشده."
+    bot.send_message(uid, text)
 
-    # سازگاری با نسخه قدیمی
-    for r in u.get("ranks", []):
-        if r["rank"] == "moderator":
-            if r.get("expires") is None or now() < r["expires"]:
-                return True
 
-    return False
+def role_assign_start(uid, remove=False):
+    if not is_admin(uid):
+        bot.send_message(uid, "⛔ فقط مالک اصلی اجازه مدیریت نقش‌ها را دارد.")
+        return
+    pending[uid] = {"type": "role_remove" if remove else "role_add"}
+    action = "حذف" if remove else "اعطای"
+    bot.send_message(uid, f"{('➖' if remove else '➕')} برای {action} نقش، کد کاربر و نقش را بفرست.\n\nمثال:\n<code>0001 senior_moderator</code>\n\nنقش‌ها: moderator / senior_moderator / senior_inspector / manager")
 
 
 def generate_code():
@@ -402,22 +399,7 @@ def create_user(message, referral=None):
         "daily_last": None,
         "daily_streak": 0,
         "mission_progress": {},
-        "_role_keys": set(),
     }
-
-    if not db_insert_user(users[uid]):
-        # اگر کاربر قبلاً در دیتابیس وجود داشته ولی حافظه خالی بوده، دوباره از دیتابیس می‌خوانیم.
-        try:
-            row = (supabase.table("users").select("*").eq("telegram_id", int(uid)).limit(1).execute().data or [None])[0]
-            if row:
-                users[uid]["_db_id"] = row.get("id")
-                users[uid]["code"] = row.get("account_code") or users[uid]["code"]
-                users[uid]["coins"] = int(row.get("coins") or users[uid]["coins"])
-                users[uid]["balance"] = int(row.get("balance") or 0)
-                users[uid]["xp"] = int(row.get("xp") or 0)
-                users[uid]["level"] = int(row.get("level") or 1)
-        except Exception as e:
-            print(f"[DB] recovery for user {uid} failed: {e}")
 
     admin_log(
         "ثبت کاربر",
@@ -454,7 +436,6 @@ def ensure_user(message):
 
     touch(uid)
     users[uid]["last_activity"] = now()
-    db_sync_user(uid)
 
     return users[uid]
 
@@ -550,8 +531,8 @@ def all_ranks_text(uid):
         else:
             result.append(rank_name)
 
-    if is_moderator(uid):
-        result.append("🛡 ناظر")
+    if can_moderate(uid):
+        result.append(role_label(uid))
 
     return "\n".join(result) if result else "ممبر"
 
@@ -610,8 +591,6 @@ def add_xp(uid, amount):
             f"🎉 <b>لول آپ شد!</b>\n\n"
             f"سطح جدید: {u['level']}"
         )
-
-    db_sync_user(uid)
 
 
 # ============================================================
@@ -672,6 +651,7 @@ def admin_menu():
         ("🔎 جستجوی کاربر", "admin_search"),
         ("🚨 گزارش‌ها", "admin_reports"),
         ("🛡 ناظران", "admin_mods"),
+        ("🎖 مدیریت نقش‌ها", "admin_roles"),
         ("⚠️ هشدارها", "admin_warnings"),
         ("🪙 مدیریت سکه", "admin_coins"),
         ("💰 مدیریت اعتبار", "admin_balance"),
@@ -1174,7 +1154,6 @@ def buy_rank(uid, rank):
         return
 
     users[uid]["coins"] -= r["price"]
-    db_sync_user(uid)
 
     expires = now() + timedelta(days=r["days"])
 
@@ -1182,8 +1161,6 @@ def buy_rank(uid, rank):
         "rank": rank,
         "expires": expires
     })
-    db_save_rank_assignment(uid, rank, expires)
-    db_sync_user(uid)
 
     transaction(
         uid,
@@ -1225,7 +1202,6 @@ def daily(uid):
 
     u["coins"] += reward
     u["daily_last"] = today
-    db_sync_user(uid)
 
     add_xp(uid, 20)
 
@@ -1291,7 +1267,6 @@ def coin_game(uid):
     reward = random.randint(5, 20)
 
     u["coins"] += reward
-    db_sync_user(uid)
     add_xp(uid, 5)
 
     bot.send_message(
@@ -1690,7 +1665,6 @@ def apply_coin_change(target, amount):
         0,
         users[target]["coins"] + amount
     )
-    db_sync_user(target)
 
     transaction(
         target,
@@ -1720,7 +1694,6 @@ def apply_balance_change(target, amount):
         0,
         users[target]["balance"] + amount
     )
-    db_sync_user(target)
 
     transaction(
         target,
@@ -1778,8 +1751,6 @@ def give_rank_admin(target, rank):
         "rank": rank,
         "expires": expires
     })
-    db_save_rank_assignment(target, rank, expires)
-    db_sync_user(target)
 
     notify(
         target,
@@ -2079,7 +2050,7 @@ def admin_logs_page(uid):
 # ============================================================
 
 def moderator_ban(uid):
-    if not is_moderator(uid):
+    if not can_moderate(uid):
         return
 
     pending[uid] = {
@@ -2095,7 +2066,7 @@ def moderator_ban(uid):
 
 
 def moderator_warn(uid):
-    if not is_moderator(uid):
+    if not can_moderate(uid):
         return
 
     pending[uid] = {
@@ -2436,95 +2407,109 @@ def callbacks(call):
             )
 
     # --------------------------
-    # پنل مدیریت
+    # پنل مدیریت و نقش‌ها
     # --------------------------
 
-    elif data == "admin_dashboard":
+    elif data == "admin_roles":
         if is_admin(uid):
+            bot.send_message(uid, "🎖 <b>مدیریت نقش‌ها</b>\n\nفقط مالک اصلی می‌تواند نقش‌های مدیریتی را اضافه یا حذف کند.", reply_markup=role_management_menu())
+
+    elif data == "role_add":
+        role_assign_start(uid, remove=False)
+
+    elif data == "role_remove":
+        role_assign_start(uid, remove=True)
+
+    elif data == "role_list":
+        if is_admin(uid):
+            role_list(uid)
+
+    elif data == "admin_dashboard":
+        if is_admin_staff(uid):
             admin_dashboard(uid)
 
     elif data == "admin_users":
-        if is_admin(uid):
+        if is_admin_staff(uid):
             admin_users(uid)
 
     elif data == "admin_search":
-        if is_admin(uid):
+        if is_admin_staff(uid):
             admin_search_start(uid)
 
     elif data == "admin_reports":
-        if is_admin(uid):
+        if is_admin_staff(uid):
             admin_reports(uid)
 
     elif data == "admin_mods":
-        if is_admin(uid):
+        if is_admin_staff(uid):
             admin_mods(uid)
 
     elif data == "admin_warnings":
-        if is_admin(uid):
+        if is_admin_staff(uid):
             admin_warnings(uid)
 
     elif data == "admin_coins":
-        if is_admin(uid):
+        if is_admin_staff(uid):
             admin_coins_start(uid)
 
     elif data == "admin_balance":
-        if is_admin(uid):
+        if is_admin_staff(uid):
             admin_balance_start(uid)
 
     elif data == "admin_xp":
-        if is_admin(uid):
+        if is_admin_staff(uid):
             admin_xp_start(uid)
 
     elif data == "admin_rank":
-        if is_admin(uid):
+        if is_admin_staff(uid):
             admin_rank_start(uid)
 
     elif data == "admin_giveaway":
-        if is_admin(uid):
+        if is_admin_staff(uid):
             create_giveaway_start(uid)
 
     elif data == "admin_challenge":
-        if is_admin(uid):
+        if is_admin_staff(uid):
             create_challenge_start(uid)
 
     elif data == "admin_broadcast":
-        if is_admin(uid):
+        if is_admin_staff(uid):
             broadcast_start(uid)
 
     elif data == "admin_reviews":
-        if is_admin(uid):
+        if is_admin_staff(uid):
             admin_reviews(uid)
 
     elif data == "admin_suggestions":
-        if is_admin(uid):
+        if is_admin_staff(uid):
             admin_suggestions(uid)
 
     elif data == "admin_stats":
-        if is_admin(uid):
+        if is_admin_staff(uid):
             admin_stats(uid)
 
     elif data == "admin_logs":
-        if is_admin(uid):
+        if is_admin_staff(uid):
             admin_logs_page(uid)
 
     elif data == "admin_chats":
-        if is_admin(uid):
+        if is_admin_staff(uid):
             admin_chats(uid)
 
     elif data == "admin_messages":
-        if is_admin(uid):
+        if is_admin_staff(uid):
             admin_messages(uid)
 
     elif data == "admin_ban":
-        if is_admin(uid):
+        if is_admin_staff(uid):
             admin_ban_start(uid)
 
     elif data == "admin_unban":
-        if is_admin(uid):
+        if is_admin_staff(uid):
             admin_unban_start(uid)
 
     elif data == "admin_tempban":
-        if is_admin(uid):
+        if is_admin_staff(uid):
             pending[uid] = {"type": "admin_tempban"}
 
             bot.send_message(
@@ -2534,51 +2519,58 @@ def callbacks(call):
             )
 
     elif data == "admin_rewards":
-        bot.send_message(
-            uid,
-            "🎟 مدیریت جوایز آماده است."
-        )
+        if is_admin_staff(uid):
+            bot.send_message(uid, f"🎟 <b>مدیریت جوایز</b>\n\nقرعه‌کشی‌ها: {len(giveaways)}\nجوایز/رویدادهای فعال: {len(giveaways)}\nکاربران: {len(users)}\n\nاز بخش «قرعه‌کشی» برای ساخت جایزه و انتخاب برنده استفاده کن.")
 
     elif data == "admin_games":
-        bot.send_message(
-            uid,
-            "🎮 مدیریت بازی‌ها آماده است."
-        )
+        if is_admin_staff(uid):
+            plays = sum(u.get("game_plays", 0) for u in users.values())
+            wins = sum(u.get("game_wins", 0) for u in users.values())
+            bot.send_message(uid, f"🎮 <b>مدیریت بازی‌ها</b>\n\nبازی‌های ثبت‌شده: {plays}\nبردها: {wins}\nکاربران فعال بازی: {sum(1 for u in users.values() if u.get('game_plays',0)>0)}")
 
     elif data == "admin_missions":
-        bot.send_message(
-            uid,
-            "🎯 مدیریت مأموریت‌ها آماده است."
-        )
+        if is_admin_staff(uid):
+            bot.send_message(uid, f"🎯 <b>مدیریت مأموریت‌ها</b>\n\nمأموریت‌های ثبت‌شده در حافظه: {len(missions)}\nکاربران دارای پیشرفت مأموریت: {sum(1 for u in users.values() if u.get('mission_progress'))}")
 
     elif data == "admin_rank_settings":
-        bot.send_message(
-            uid,
-            "🏅 تنظیمات رنک‌ها در بخش RANKS بالای کد قرار دارد."
-        )
+        if is_admin_staff(uid):
+            text = "🏅 <b>تنظیمات رنک‌ها</b>\n\n"
+            for key, r in RANKS.items():
+                text += f"{r['name']} | قیمت: {r['price']} | مدت: {r['days']} روز | اولویت: {r['priority']}\n"
+            bot.send_message(uid, text)
 
     elif data == "admin_cleanup":
-        bot.send_message(
-            uid,
-            "🧹 برای پاکسازی از دستورات مدیریتی استفاده کن."
-        )
+        if is_admin_staff(uid):
+            expired = 0
+            for u in users.values():
+                before = len(u.get("ranks", []))
+                u["ranks"] = [r for r in u.get("ranks", []) if not r.get("expires") or now() < r["expires"]]
+                expired += before - len(u["ranks"])
+            for uid2 in list(temp_bans):
+                if now() >= temp_bans[uid2]["until"]:
+                    del temp_bans[uid2]
+            bot.send_message(uid, f"🧹 پاکسازی انجام شد.\n\nرنک منقضی حذف‌شده: {expired}\nبن موقت منقضی پاک‌شده: بررسی و حذف شد.")
 
     elif data == "admin_settings":
-        bot.send_message(
-            uid,
-            "⚙️ تنظیمات اصلی بات در ابتدای فایل قرار دارد."
-        )
+        if is_admin_staff(uid):
+            bot.send_message(uid, f"⚙️ <b>تنظیمات بات</b>\n\nنام: {BOT_NAME}\nیوزرنیم: @{BOT_USERNAME}\nحداکثر کد حساب: {ACCOUNT_CODE_MAX}\nسکه شروع: {WELCOME_COINS}\nزمان آنلاین: {ONLINE_MINUTES} دقیقه\nوضعیت Supabase: {SUPABASE_STATUS}")
 
     elif data == "admin_security":
-        bot.send_message(
-            uid,
-            "🔐 <b>امنیت</b>\n\n"
-            "✅ توکن بات از GitHub Secret خوانده می‌شود.\n"
-            "✅ کلید Supabase از GitHub Secret خوانده می‌شود.\n"
-            "✅ اطلاعات اصلی کاربران در Supabase ذخیره می‌شود."
-        )
+        if is_admin_staff(uid):
+            token_ok = bool(os.getenv("BOT_TOKEN"))
+            url_ok = bool(os.getenv("SUPABASE_URL"))
+            key_ok = bool(os.getenv("SUPABASE_KEY"))
+            bot.send_message(uid, f"🔐 <b>امنیت</b>\n\n"
+                             f"{'✅' if token_ok else '❌'} توکن بات از GitHub Secret خوانده می‌شود.\n"
+                             f"{'✅' if url_ok else '❌'} آدرس Supabase از GitHub Secret خوانده می‌شود.\n"
+                             f"{'✅' if key_ok else '❌'} کلید Supabase از GitHub Secret خوانده می‌شود.\n"
+                             f"{'✅' if supabase else '⚠️'} اتصال Supabase: {SUPABASE_STATUS}\n"
+                             f"{'✅' if ADMIN_ID else '❌'} شناسه مالک اصلی تنظیم شده است.\n\n"
+                             "🔒 هیچ Secret در این پیام نمایش داده نمی‌شود.")
 
     elif data == "admin_export":
+        if not is_admin_staff(uid):
+            return
         text = "uid,code,name,coins,balance,xp,level\n"
 
         for u in users.values():
@@ -2602,19 +2594,19 @@ def callbacks(call):
     # --------------------------
 
     elif data == "mod_chats":
-        if is_moderator(uid):
+        if can_moderate(uid):
             admin_chats(uid)
 
     elif data == "mod_ban":
-        if is_moderator(uid):
+        if can_moderate(uid):
             moderator_ban(uid)
 
     elif data == "mod_warn":
-        if is_moderator(uid):
+        if can_moderate(uid):
             moderator_warn(uid)
 
     elif data == "mod_reports":
-        if is_moderator(uid):
+        if can_moderate(uid):
             admin_reports(uid)
 
     elif data == "new_review":
@@ -2950,17 +2942,13 @@ def text_handler(message):
         return
 
     if text == "🛠 پنل مدیریت":
-        if is_admin(uid):
+        if is_admin_staff(uid):
             admin_panel(uid)
         return
 
     if text == "🛡 پنل ناظر":
-        if is_moderator(uid):
-            bot.send_message(
-                uid,
-                "🛡 <b>پنل ناظر</b>",
-                reply_markup=moderator_menu()
-            )
+        if can_moderate(uid):
+            management_panel(uid)
         return
 
     # --------------------------
@@ -3075,9 +3063,34 @@ def text_handler(message):
 
             return
 
+        # مدیریت نقش‌ها
+        if ptype in ("role_add", "role_remove"):
+            if not is_admin(uid):
+                pending.pop(uid, None)
+                return
+            parts = text.split()
+            if len(parts) != 2:
+                bot.send_message(uid, "فرمت: <code>0001 senior_moderator</code>")
+                return
+            target = find_user(parts[0])
+            role = parts[1].lower()
+            if not target:
+                bot.send_message(uid, "❌ کاربر پیدا نشد.")
+                return
+            if role not in ROLE_DEFS or role == "owner":
+                bot.send_message(uid, "❌ نقش نامعتبر است. از moderator / senior_moderator / senior_inspector / manager استفاده کن.")
+                return
+            if ptype == "role_add":
+                ok, msg = assign_role(target, role, uid)
+            else:
+                ok, msg = remove_role(target, role, uid)
+            pending.pop(uid, None)
+            bot.send_message(uid, ("✅ " if ok else "❌ ") + msg)
+            return
+
         # جستجوی ادمین
         if ptype == "admin_search":
-            if not is_admin(uid):
+            if not is_admin_staff(uid):
                 pending.pop(uid, None)
                 return
 
@@ -3097,7 +3110,7 @@ def text_handler(message):
 
         # مدیریت سکه
         if ptype == "admin_coins":
-            if not is_admin(uid):
+            if not is_admin_staff(uid):
                 pending.pop(uid, None)
                 return
 
@@ -3140,7 +3153,7 @@ def text_handler(message):
 
         # مدیریت اعتبار
         if ptype == "admin_balance":
-            if not is_admin(uid):
+            if not is_admin_staff(uid):
                 pending.pop(uid, None)
                 return
 
@@ -3175,7 +3188,7 @@ def text_handler(message):
 
         # مدیریت XP
         if ptype == "admin_xp":
-            if not is_admin(uid):
+            if not is_admin_staff(uid):
                 pending.pop(uid, None)
                 return
 
@@ -3218,7 +3231,7 @@ def text_handler(message):
 
         # مدیریت رنک
         if ptype == "admin_rank":
-            if not is_admin(uid):
+            if not is_admin_staff(uid):
                 pending.pop(uid, None)
                 return
 
@@ -3253,7 +3266,7 @@ def text_handler(message):
 
         # بن
         if ptype == "admin_ban":
-            if not is_admin(uid):
+            if not is_admin_staff(uid):
                 pending.pop(uid, None)
                 return
 
@@ -3288,7 +3301,7 @@ def text_handler(message):
 
         # رفع بن
         if ptype == "admin_unban":
-            if not is_admin(uid):
+            if not is_admin_staff(uid):
                 pending.pop(uid, None)
                 return
 
@@ -3323,7 +3336,7 @@ def text_handler(message):
 
         # بن موقت
         if ptype == "admin_tempban":
-            if not is_admin(uid):
+            if not is_admin_staff(uid):
                 pending.pop(uid, None)
                 return
 
@@ -3372,7 +3385,7 @@ def text_handler(message):
 
         # پیام همگانی
         if ptype == "broadcast":
-            if not is_admin(uid):
+            if not is_admin_staff(uid):
                 pending.pop(uid, None)
                 return
 
@@ -3388,7 +3401,7 @@ def text_handler(message):
 
         # تغییر سریع سکه
         if ptype == "quick_coin":
-            if not is_admin(uid):
+            if not is_admin_staff(uid):
                 return
 
             try:
@@ -3413,7 +3426,7 @@ def text_handler(message):
 
         # تغییر سریع اعتبار
         if ptype == "quick_balance":
-            if not is_admin(uid):
+            if not is_admin_staff(uid):
                 return
 
             try:
@@ -3438,7 +3451,7 @@ def text_handler(message):
 
         # XP سریع
         if ptype == "quick_xp":
-            if not is_admin(uid):
+            if not is_admin_staff(uid):
                 return
 
             try:
@@ -3472,7 +3485,7 @@ def text_handler(message):
 
         # رنک سریع
         if ptype == "quick_rank":
-            if not is_admin(uid):
+            if not is_admin_staff(uid):
                 return
 
             rank = text.lower()
@@ -3499,7 +3512,7 @@ def text_handler(message):
 
         # ناظر بن
         if ptype == "mod_ban":
-            if not is_moderator(uid):
+            if not can_moderate(uid):
                 return
 
             parts = text.split(maxsplit=1)
@@ -3547,7 +3560,7 @@ def text_handler(message):
 
         # ناظر هشدار
         if ptype == "mod_warn":
-            if not is_moderator(uid):
+            if not can_moderate(uid):
                 return
 
             parts = text.split(maxsplit=1)
@@ -3842,35 +3855,11 @@ def rank_cleaner():
 
 
 # ============================================================
-# بارگذاری اولیه دیتابیس
-# ============================================================
-
-# اکنون اطلاعات قبلی کاربران از Supabase وارد حافظه بات می‌شود.
-db_load_users()
-db_load_ranks_and_roles()
-
-
-# ============================================================
 # اجرای پس‌زمینه
 # ============================================================
 
 threading.Thread(
     target=background_worker,
-    daemon=True
-).start()
-
-def db_sync_worker():
-    while True:
-        try:
-            for uid in list(users.keys()):
-                db_sync_user(uid)
-        except Exception as e:
-            print(f"[DB] periodic sync failed: {e}")
-        time.sleep(15)
-
-
-threading.Thread(
-    target=db_sync_worker,
     daemon=True
 ).start()
 
