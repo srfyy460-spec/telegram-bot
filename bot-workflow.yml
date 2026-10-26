@@ -1,0 +1,40 @@
+name: Telegram Bot
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  bot:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install requirements
+        run: pip install -r requirements.txt
+
+      - name: Prepare GitHub data files
+        run: |
+          mkdir -p data
+          test -f data/state.json || echo '{"users":{},"roles":{}}' > data/state.json
+          test -f data/stats.json || echo '{"updated_at":"","online_minutes":10,"total_members":0,"active_members":0,"banned_members":0,"members":[]}' > data/stats.json
+          test -f data/commands.json || echo '[]' > data/commands.json
+
+      - name: Run bot
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_BRANCH: ${{ github.ref_name }}
+        run: python bot.py
