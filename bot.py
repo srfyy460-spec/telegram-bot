@@ -11,6 +11,10 @@ import threading
 import time
 import re
 import os
+import json
+import base64
+from urllib.request import Request, urlopen
+from urllib.error import HTTPError, URLError
 
 try:
     from supabase import create_client, Client
@@ -42,6 +46,262 @@ if SUPABASE_URL and SUPABASE_KEY and create_client:
         SUPABASE_STATUS = f"⚠️ خطا در اتصال: {str(e)[:120]}"
 elif not SUPABASE_URL or not SUPABASE_KEY:
     SUPABASE_STATUS = "⚠️ Secretهای Supabase تنظیم نشده‌اند"
+
+# ============================================================
+# اتصال اختیاری به GitHub برای داشبورد و مدیریت وب
+# این بخش دیتابیس نیست؛ اطلاعات در فایل‌های همین Repository نگهداری می‌شود.
+# ============================================================
+
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
+GITHUB_REPO = os.getenv("GITHUB_REPOSITORY", "")
+GITHUB_BRANCH = os.getenv("GITHUB_BRANCH", "main")
+GITHUB_DATA_DIR = "data"
+GITHUB_STATE_FILE = f"{GITHUB_DATA_DIR}/state.json"
+GITHUB_STATS_FILE = f"{GITHUB_DATA_DIR}/stats.json"
+GITHUB_COMMANDS_FILE = f"{GITHUB_DATA_DIR}/commands.json"
+_github_lock = threading.RLock()
+_last_github_sync = 0.0
+
+
+def _github_enabled():
+    return bool(GITHUB_TOKEN and GITHUB_REPO)
+
+
+def _github_url(path):
+    return f"https://api.github.com/repos/{GITHUB_REPO}/contents/{path}"
+
+
+def _github_request(method, path, payload=None):
+    if not _github_enabled():
+        return None
+    body = json.dumps(payload, ensure_ascii=False).encode("utf-8") if payload is not None else None
+    req = Request(_github_url(path), data=body, method=method, headers={
+        "Authorization": f"Bearer {GITHUB_TOKEN}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+        "User-Agent": "chat-anonymous-bot",
+        "Content-Type": "application/json",
+    })
+    try:
+        with urlopen(req, timeout=15) as response:
+            raw = response.read()
+            return json.loads(raw.decode("utf-8")) if raw else {}
+    except Exception:
+        return None
+
+
+def _github_read_json(path, default):
+    data = _github_request("GET", path)
+    if not data or "content" not in data:
+        return default
+    try:
+        raw = base64.b64decode(data["content"]).decode("utf-8")
+        return json.loads(raw)
+    except Exception:
+        return default
+
+
+def _github_write_json(path, obj, message):
+    if not _github_enabled():
+        return False
+    current = _github_request("GET", path) or {}
+    sha = current.get("sha")
+    content = base64.b64encode(json.dumps(obj, ensure_ascii=False, indent=2, default=str).encode("utf-8")).decode("ascii")
+    payload = {"message": message, "content": content, "branch": GITHUB_BRANCH}
+    if sha:
+        payload["sha"] = sha
+    return bool(_github_request("PUT", path, payload))
+
+
+def _json_safe(value):
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if isinstance(value, dict):
+        return {str(k): _json_safe(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_json_safe(v) for v in value]
+    return value
+
+
+def github_save_state():
+    if not _github_enabled():
+        return False
+    with _github_lock:
+        state = {
+            "users": _json_safe(users),
+            "roles": _json_safe(local_roles),
+        }
+        return _github_write_json(GITHUB_STATE_FILE, state, "chore: update bot state")
+
+
+def github_save_stats():
+    if not _github_enabled():
+        return False
+    current = now()
+    active_cutoff = current - timedelta(minutes=ONLINE_MINUTES)
+    members = []
+    active = 0
+    for uid, u in users.items():
+        last = u.get("last_activity")
+        if isinstance(last, str):
+            try:
+                last = datetime.fromisoformat(last)
+            except Exception:
+                last = None
+        is_active = bool(last and last >= active_cutoff)
+        if is_active:
+            active += 1
+        members.append({
+            "id": uid,
+            "code": u.get("code", ""),
+            "name": u.get("name", "کاربر"),
+            "username": u.get("username", ""),
+            "joined": str(u.get("joined", "")),
+            "last_activity": str(last or ""),
+            "active": is_active,
+            "banned": bool(u.get("banned", False)),
+            "role": (ROLE_DEFS["owner"]["label"] if uid == ADMIN_ID else (sorted((ROLE_DEFS[r]["level"], ROLE_DEFS[r]["label"]) for r in local_roles.get(uid, []) if r in ROLE_DEFS)[-1][1] if any(r in ROLE_DEFS for r in local_roles.get(uid, [])) else "👤 کاربر")),
+            "messages": u.get("messages", 0),
+            "chats": u.get("chats", 0),
+        })
+    stats = {
+        "updated_at": current.isoformat(),
+        "online_minutes": ONLINE_MINUTES,
+        "total_members": len(users),
+        "active_members": active,
+        "banned_members": sum(1 for u in users.values() if u.get("banned")),
+        "members": members,
+    }
+    return _github_write_json(GITHUB_STATS_FILE, stats, "chore: update bot stats")
+
+
+def github_sync(force=False):
+    global _last_github_sync
+    if not _github_enabled():
+        return
+    current = time.time()
+    if not force and current - _last_github_sync < 20:
+        return
+    _last_github_sync = current
+    try:
+        github_save_state()
+        github_save_stats()
+    except Exception:
+        pass
+
+
+def github_load_state():
+    if not _github_enabled():
+        return
+    try:
+        state = _github_read_json(GITHUB_STATE_FILE, {})
+        loaded = state.get("users", {}) if isinstance(state, dict) else {}
+        if isinstance(loaded, dict):
+            for key, u in loaded.items():
+                uid = int(key)
+                for field in ("joined", "last_activity", "daily_last"):
+                    if isinstance(u.get(field), str):
+                        try:
+                            u[field] = datetime.fromisoformat(u[field])
+                        except Exception:
+                            pass
+                for r in u.get("ranks", []):
+                    if isinstance(r.get("expires"), str):
+                        try:
+                            r["expires"] = datetime.fromisoformat(r["expires"])
+                        except Exception:
+                            pass
+                users[uid] = u
+        roles = state.get("roles", {}) if isinstance(state, dict) else {}
+        if isinstance(roles, dict):
+            local_roles.update({int(k): v for k, v in roles.items()})
+    except Exception:
+        pass
+
+
+def _command_target(value):
+    try:
+        iv = int(value)
+        if iv in users:
+            return iv
+    except Exception:
+        pass
+    return find_user(str(value))
+
+
+def github_process_commands():
+    if not _github_enabled():
+        return
+    commands = _github_read_json(GITHUB_COMMANDS_FILE, [])
+    if not isinstance(commands, list) or not commands:
+        return
+    remaining = []
+    changed = False
+    for cmd in commands:
+        try:
+            if not isinstance(cmd, dict):
+                continue
+            action = cmd.get("action")
+            actor = int(cmd.get("actor", ADMIN_ID))
+            if actor != ADMIN_ID:
+                remaining.append(cmd)
+                continue
+            target = _command_target(cmd.get("target", "")) if cmd.get("target") not in (None, "") else None
+            if action == "ban" and target:
+                users[target]["banned"] = True
+                notify(target, "🚫 حساب شما توسط مدیریت وب مسدود شد.")
+            elif action == "unban" and target:
+                users[target]["banned"] = False
+                temp_bans.pop(target, None)
+                notify(target, "🔓 مسدودی حساب شما توسط مدیریت وب برداشته شد.")
+            elif action == "tempban" and target:
+                minutes = max(1, int(cmd.get("minutes", 60)))
+                temp_bans[target] = {"until": now() + timedelta(minutes=minutes), "reason": str(cmd.get("reason", ""))}
+                notify(target, f"⏱ حساب شما {minutes} دقیقه مسدود شد.\nدلیل: {cmd.get('reason','-')}")
+            elif action in ("coins", "balance", "xp") and target:
+                amount = int(cmd.get("amount", 0))
+                field = action
+                users[target][field] = max(0, users[target].get(field, 0) + amount)
+                notify(target, f"🎛 تغییر توسط مدیریت وب: {field} {amount:+d}")
+            elif action == "rank" and target:
+                give_rank_admin(target, str(cmd.get("rank", "member")))
+            elif action == "role_add" and target:
+                assign_role(target, str(cmd.get("role")), ADMIN_ID)
+            elif action == "role_remove" and target:
+                remove_role(target, str(cmd.get("role")), ADMIN_ID)
+            elif action == "message" and target:
+                notify(target, str(cmd.get("text", "")))
+            elif action == "broadcast":
+                broadcast(str(cmd.get("text", "")))
+            elif action == "cleanup":
+                for u in users.values():
+                    u["ranks"] = [r for r in u.get("ranks", []) if not r.get("expires") or now() < r["expires"]]
+                for x in list(temp_bans):
+                    if now() >= temp_bans[x]["until"]:
+                        del temp_bans[x]
+            else:
+                remaining.append(cmd)
+                continue
+            admin_log("عملیات وب", target, f"{action}: {cmd}")
+            changed = True
+        except Exception:
+            remaining.append(cmd)
+    if changed or len(remaining) != len(commands):
+        _github_write_json(GITHUB_COMMANDS_FILE, remaining, "chore: process web commands")
+        github_sync(force=True)
+
+
+def github_worker():
+    github_load_state()
+    github_sync(force=True)
+    while True:
+        try:
+            github_process_commands()
+            github_sync()
+        except Exception:
+            pass
+        time.sleep(10)
+
 
 # نقش‌های مدیریتی دائمی در Supabase
 ROLE_DEFS = {
@@ -143,6 +403,13 @@ def now():
 
 def touch(uid):
     user_last_activity[uid] = now()
+    if uid in users:
+        users[uid]["last_activity"] = user_last_activity[uid]
+    # همگام‌سازی سبک؛ تابع داخلی خودش فاصله زمانی را کنترل می‌کند.
+    try:
+        github_sync()
+    except Exception:
+        pass
 
 
 def is_admin(uid):
@@ -735,6 +1002,10 @@ def start(message):
     new_user = uid not in users
 
     u = ensure_user(message)
+    try:
+        github_sync(force=True)
+    except Exception:
+        pass
 
     if new_user:
         bot.send_message(
@@ -3853,6 +4124,9 @@ def rank_cleaner():
 
         time.sleep(300)
 
+
+# همگام‌سازی GitHub و اجرای فرمان‌های پنل وب
+threading.Thread(target=github_worker, daemon=True).start()
 
 # ============================================================
 # اجرای پس‌زمینه
