@@ -1,8 +1,8 @@
 {
-  "updated_at": "2026-11-02T18:42:45.016495",
+  "updated_at": "2026-11-02T18:43:07.608720",
   "online_minutes": 10,
   "total_members": 2,
-  "active_members": 1,
+  "active_members": 0,
   "banned_members": 0,
   "members": [
     {
@@ -25,7 +25,7 @@
       "username": "shahab2013999",
       "joined": "2026-11-02 17:09:43.400998",
       "last_activity": "2026-11-02 18:32:53.004696",
-      "active": true,
+      "active": false,
       "banned": false,
       "role": "👑 مالک",
       "messages": 0,
