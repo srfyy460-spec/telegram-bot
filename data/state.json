@@ -1,4 +1,33 @@
 {
-  "users": {},
+  "users": {
+    "7835609302": {
+      "id": 7835609302,
+      "username": "vhdydf",
+      "name": "سسی",
+      "code": "0001",
+      "coins": 100,
+      "balance": 0,
+      "xp": 0,
+      "level": 1,
+      "ranks": [],
+      "phone": null,
+      "phone_skipped": false,
+      "photo": null,
+      "anonymous": true,
+      "banned": false,
+      "warnings": 0,
+      "messages": 0,
+      "chats": 0,
+      "wins": 0,
+      "referrals": 0,
+      "joined": "2026-11-02T17:07:11.530238",
+      "last_activity": "2026-11-02T17:07:11.530241",
+      "game_wins": 0,
+      "game_plays": 0,
+      "daily_last": null,
+      "daily_streak": 0,
+      "mission_progress": {}
+    }
+  },
   "roles": {}
 }
