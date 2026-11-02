@@ -1,8 +1,8 @@
 {
-  "updated_at": "2026-11-02T17:09:31.220793",
+  "updated_at": "2026-11-02T17:09:53.751979",
   "online_minutes": 10,
-  "total_members": 1,
-  "active_members": 1,
+  "total_members": 2,
+  "active_members": 2,
   "banned_members": 0,
   "members": [
     {
@@ -15,6 +15,19 @@
       "active": true,
       "banned": false,
       "role": "👤 کاربر",
+      "messages": 0,
+      "chats": 0
+    },
+    {
+      "id": 7723971526,
+      "code": "0002",
+      "name": "shahab",
+      "username": "shahab2013999",
+      "joined": "2026-11-02 17:09:43.400998",
+      "last_activity": "2026-11-02 17:09:48.210097",
+      "active": true,
+      "banned": false,
+      "role": "👑 مالک",
       "messages": 0,
       "chats": 0
     }
